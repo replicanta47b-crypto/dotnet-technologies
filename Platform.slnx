@@ -19,5 +19,6 @@
     <Project Path="Services/Disputes/Disputes.Application/Disputes.Application.csproj" />
     <Project Path="Services/Disputes/Disputes.Infrastructure/Disputes.Infrastructure.csproj" />
     <Project Path="Services/Disputes/Disputes.Domain/Disputes.Domain.csproj" />
+    <Project Path="Services/Disputes/Disputes.Domain.Tests/Disputes.Domain.Tests.csproj" />
   </Folder>
 </Solution>

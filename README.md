@@ -440,3 +440,9 @@ curl -i -X PUT http://localhost:5100/api/disputes/<id> -H "Content-Type: applica
 | 4 | Лог: 409 при конфлікті версій (`If-Match`) | [docs/lab-04/4-log-409-version-conflict.jpg](docs/lab-04/4-log-409-version-conflict.jpg) |
 | 5 | Compass: документ `disputes` (camelCase, вкладені `openedBy`, `comments`) | [docs/lab-04/5-compass-disputes-document.jpg](docs/lab-04/5-compass-disputes-document.jpg) |
 | 6 | Compass: індекси колекції `disputes` | [docs/lab-04/6-compass-indexes.jpg](docs/lab-04/6-compass-indexes.jpg) |
+
+### Unit-тести (контрольна точка Частини 2)
+
+`Services/Disputes/Disputes.Domain.Tests` — xUnit-проєкт, посилається лише на Domain (жодного звернення до MongoDB):
+некоректна сума/валюта кидає `DomainException`, дозволені й заборонені переходи статусів, заборона видалення спору «на розгляді»,
+порівняння Value Objects за значенням. Запуск: `dotnet test Platform.slnx --filter "FullyQualifiedName~Disputes.Domain.Tests"`.
