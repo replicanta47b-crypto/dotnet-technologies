@@ -197,17 +197,17 @@ curl $BASE/api/invoices
 curl -X POST $BASE/api/invoices -H "Content-Type: application/json" \
   -d '{"id":100,"number":"INV-2026-0100","merchantName":"Test Merchant","amount":500.00,"currency":"UAH"}'
 
-# створити платіж з розподілом на рахунки 3 і 5 (одна транзакція)
+# створити платіж з розподілом на вільні рахунки 6 (seed) і 100 (щойно створений) — одна транзакція
 curl -X POST $BASE/api/payments -H "Content-Type: application/json" \
   -d '{"customerId":1,"currency":"UAH","method":"Card","payerAccount":"4111-XXXX-XXXX-1111",
-       "description":"Оплата","allocations":[{"invoiceId":3},{"invoiceId":5}]}'
+       "description":"Оплата","allocations":[{"invoiceId":6},{"invoiceId":100}]}'
 
 curl $BASE/api/payments/5
-curl $BASE/api/customers/1/payments?page=1&pageSize=10
+curl "$BASE/api/customers/1/payments?page=1&pageSize=10"
 
 # життєвий цикл: Created -> Validating -> Authorized
 curl -X POST $BASE/api/payments/5/status -H "Content-Type: application/json" -d '{"newStatus":"Validating"}'
-curl -X POST $BASE/api/payments/5/authorize -H "Content-Type: application/json" -d '{"amount":755.00,"providerRef":"AUTH-1"}'
+curl -X POST $BASE/api/payments/5/authorize -H "Content-Type: application/json" -d '{"amount":800.00,"providerRef":"AUTH-1"}'
 curl -X POST $BASE/api/payments/5/status -H "Content-Type: application/json" -d '{"newStatus":"Authorized"}'
 
 # помилки
@@ -217,7 +217,7 @@ curl -i -X POST $BASE/api/customers -H "Content-Type: application/json" -d '{"em
 curl -i -X DELETE $BASE/api/payments/2                                       # 204 (платіж у статусі Created)
 ```
 
-> Id у прикладах (3, 5, 2) відповідають seed-даним Лаб. 01; якщо ви змінювали seed — підставте свої. Розподіл на рахунок, що вже оплачений іншим платежем, поверне 409.
+> Id у прикладах відповідають seed-даним Лаб. 01 (рахунки 1–5 уже розподілені, вільний — 6; перший новий платіж отримає Id 5). Якщо Id інші — підставте свої. Розподіл рахунку, що вже оплачується, поверне 409.
 
 ## Самоперевірка (Лаб. 02)
 
