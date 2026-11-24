@@ -26,7 +26,12 @@ public class CorrelationIdMiddleware(RequestDelegate next, ILogger<CorrelationId
         }
 
         var correlationId = value.ToString();
-        context.Response.Headers[HeaderName] = correlationId;
+        // OnStarting спрацьовує після того, як YARP скопіював заголовки відповіді сервісу → у відповіді рівно одне значення
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers[HeaderName] = correlationId;
+            return Task.CompletedTask;
+        });
         Activity.Current?.SetTag("correlation.id", correlationId);   // trace можна шукати за CorrelationId
 
         using (LogContext.PushProperty("CorrelationId", correlationId))

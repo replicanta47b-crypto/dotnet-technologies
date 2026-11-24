@@ -53,7 +53,15 @@ public static class Extensions
 
         builder.Services.ConfigureHttpClientDefaults(http =>
         {
-            http.AddStandardResilienceHandler();                 // retry / circuit breaker / timeout (детально — Лаб. 07)
+            http.AddStandardResilienceHandler(o =>               // retry / circuit breaker / timeout (детально — Лаб. 07)
+            {
+                // швидка деградація: недоступний сервіс не має тримати агрегатор десятки секунд
+                o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(3);
+                o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(8);
+                o.Retry.MaxRetryAttempts = 2;
+                o.Retry.Delay = TimeSpan.FromMilliseconds(300);
+                o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);   // має бути >= 2 × AttemptTimeout
+            });
             http.AddServiceDiscovery();                          // http://orders-api → реальна адреса від Aspire
             http.AddHttpMessageHandler<CorrelationIdHandler>();  // CorrelationId у вихідних запитах
         });
