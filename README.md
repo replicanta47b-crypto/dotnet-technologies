@@ -157,7 +157,7 @@ Services/Payments/
 | SQL | Усі значення — параметрами; імена таблиць — константи коду; з'єднання/команди/рідери в `using` / `await using` |
 | Unit of Work | Одне `SqlConnection` + одна `SqlTransaction` на HTTP-запит (Scoped). `BeginTransactionAsync(IsolationLevel)`, `CommitAsync`, `RollbackAsync` (враховує «зомбі»-транзакцію після `XACT_ABORT`), `DisposeAsync` |
 | Транзакційна операція | `PaymentService.CreateAsync`: клієнт → платіж → деталі → розподіл на рахунки (знімок номера й суми рахунку робить `usp_AddPaymentAllocation`). Збій будь-якого кроку відкочує все |
-| DTO / AutoMapper | DTO окремо від моделей; `MappingProfile` реєструється в одному місці (`AddPaymentsServices`), ліцензійний ключ — `AutoMapper:LicenseKey` |
+| DTO / AutoMapper | DTO окремо від моделей; `MappingProfile` реєструється централізовано в `Program.cs`, ліцензійний ключ — `AutoMapper:LicenseKey` |
 | Валидація | 1-й рівень — DataAnnotations на DTO (→ 400); 2-й — бізнес-правила в BLL (валюта, метод, дублікати рахунків, унікальність e-mail, збіг валют) |
 | Помилки | `SqlExceptionTranslator`: 50001/50006/50008 → NotFound; 50002–50014, 2601/2627, 547 → BusinessConflict. `DomainExceptionHandler` (IExceptionHandler + ProblemDetails): 404 / 409 / 400 / 500 |
 | Контролери | Тонкі, async, attribute routing, `CancellationToken`, `CreatedAtAction`, Swagger з `ProducesResponseType` |
