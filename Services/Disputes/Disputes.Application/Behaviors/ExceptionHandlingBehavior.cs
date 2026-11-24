@@ -1,4 +1,5 @@
 using FluentValidation;
+using Disputes.Domain.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -23,6 +24,12 @@ public class ExceptionHandlingBehavior<TRequest, TResponse>(
         {
             logger.LogWarning("{RequestName} rejected by validation: {Errors}",
                 typeof(TRequest).Name, ex.Errors.Select(e => $"{e.PropertyName}: {e.ErrorMessage}"));
+            throw;
+        }
+        catch (Exception ex) when (ex is DomainException or NotFoundException or ConflictException)
+        {
+            // очікувані бізнес-помилки: попередження без стек-трейсу
+            logger.LogWarning("{RequestName} rejected: {Message}", typeof(TRequest).Name, ex.Message);
             throw;
         }
         catch (Exception ex)

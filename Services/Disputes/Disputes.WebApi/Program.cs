@@ -46,9 +46,9 @@ builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 app.UseMiddleware<CorrelationIdMiddleware>();   // CorrelationId, RequestPath, UserId → кожен лог
+app.UseSerilogRequestLogging();                  // зовнішній: бачить фінальний статус (400/404/409), а не 500
 app.UseExceptionHandler();                       // → ApiExceptionHandler → ProblemDetails
 app.UseStatusCodePages();
-app.UseSerilogRequestLogging();
 
 app.UseSwagger();
 app.UseSwaggerUI();
