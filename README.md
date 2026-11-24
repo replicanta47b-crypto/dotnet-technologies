@@ -330,3 +330,102 @@ curl -i -X POST $BASE/api/invoices/1/void                                       
 - [ ] Повторний запуск застосунку не дублює seed-дані
 - [ ] У лозі SQL: Eager — 1 запит, Explicit — 2
 - [ ] `/api/invoices/overdue` працює через ту саму `ListAsync(spec)` без змін у репозиторії
+
+---
+
+# Лаб. 04 — Мікросервіс Disputes: Clean Architecture, CQRS (MediatR), MongoDB
+
+Проєкт №3 (контекст «Спори», MongoDB `disputes_db`, колекція `disputes` з Лаб. 01) реалізовано як мікросервіс за Clean Architecture. Домен «Відгуки» з методички замінено нашим доменом «Спори» — суфікси проєктів збережено.
+
+## Схема шарів і залежностей
+
+```
+Services/Disputes/
+├── Disputes.Domain          сутності (Dispute, DisputeThread), BaseEntity, ValueObject,
+│                            Value Objects (Author, EvidenceItem, Comment), винятки, інтерфейси репозиторіїв
+│                            └── залежить від: нічого (лише тип ObjectId з MongoDB.Bson)
+├── Disputes.Application     Commands/ · Queries/ · Behaviors/ · Caching/ (Лаб. 06) · Dtos/ · Common/
+│                            └── залежить від: Domain
+├── Disputes.Infrastructure  MongoDbContext, BsonClassMap, репозиторії, DisputeQueries, індекси, сідінг
+│                            └── залежить від: Application, Domain
+└── Disputes.WebApi          контролери, Program.cs, ProblemDetails, Swagger, appsettings.*.json
+                             └── залежить від: Application, Infrastructure (лише для реєстрації залежностей)
+```
+
+Правило: внутрішні шари не знають про зовнішні. `Disputes.Domain` не посилається на жоден інший проєкт і не містить `MongoDB.Driver`. Жоден контролер і жоден обробник не звертається до `IMongoCollection` — читання йде через `IDisputeQueries` (інтерфейс у Application, реалізація в Infrastructure).
+
+## Що де лежить
+
+| Тема | Де |
+|---|---|
+| Сутності з `BaseEntity` (Id/CreatedAt/UpdatedAt/Version), приватні setter-и | `Disputes.Domain/Entities` |
+| `ValueObject` + незмінні `Author`, `EvidenceItem`, `Comment` | `Disputes.Domain/Common`, `ValueObjects` |
+| Команди Create / Update / Delete / AddComment | `Disputes.Application/Commands/*` |
+| Запити GetById / GetList (пагінація, фільтри, `$text`, сортування — у MongoDB) | `Disputes.Application/Queries/*`, `Disputes.Infrastructure/Persistence/DisputeQueries.cs` |
+| Pipeline: Logging → ExceptionHandling → Validation → Performance | `Disputes.Application/Behaviors`, `DependencyInjection.cs` |
+| `MongoDbContext` через `IOptions<MongoDbOptions>` | `Disputes.Infrastructure/Persistence` |
+| BSON-мапінг без атрибутів у домені (`BsonClassMap`) | `Persistence/MongoMappings.cs` |
+| Optimistic concurrency (поле `version`) | `Persistence/DisputeRepository.cs`, ETag / If-Match у контролері |
+| Глобальна обробка помилок (ProblemDetails, MongoDB-винятки) | `Disputes.WebApi/Infrastructure/ApiExceptionHandler.cs` |
+| Сідінг і індекси при старті | `Infrastructure/Seeding` |
+
+Особливості: документ `disputes` має структуру з Лаб. 01 (camelCase, вкладені `openedBy`, `evidence[]`, `comments[]`); `status` і `reason` зберігаються snake_case-рядками (`under_review`); поля, яких немає в моделі (`fraudDetails`, `serviceProof`, `tags`), не губляться при оновленні (extra elements — гнучка схема). Сума спору зберігається як `decimal128`, дати — UTC.
+
+## Запуск
+
+1. MongoDB має працювати локально (`mongodb://127.0.0.1:27017`), база `disputes_db` створена скриптами Лаб. 01 (`db/p3/collections.js`, `db/p3/seed.js`) — це необов'язково: сервіс сам створює індекси й тестові дані.
+2. Окремо: `dotnet run --project Services/Disputes/Disputes.WebApi` → http://localhost:5100/swagger
+3. Через Aspire: `dotnet run --project Platform.AppHost` → у дашборді ресурс `disputes-api` (рядок підключення — `ConnectionStrings:DisputesDb` у `Platform.AppHost/appsettings.json`).
+4. Health check: `GET /health` (ping MongoDB).
+
+Налаштування: секція `MongoDb` (`ConnectionString`, `DatabaseName`) в `appsettings.json`, окремі значення в `appsettings.Development.json` / `Staging` / `Production`. Пул з'єднань і таймаути — параметрами рядка підключення (`maxPoolSize`, `serverSelectionTimeoutMS`).
+
+## API
+
+| Метод і шлях | Призначення | Коди |
+|---|---|---|
+| `GET /api/disputes?merchantId=&paymentId=&status=&search=&sortBy=&desc=&page=&pageSize=` | список, фільтри, `$text`-пошук, пагінація | 200, 400 |
+| `GET /api/disputes/{id}` | спір за ObjectId; `ETag` = версія документа | 200, 400, 404 |
+| `POST /api/disputes` | відкрити спір (`Location` — рядковий ObjectId) | 201, 400, 409 |
+| `PUT /api/disputes/{id}` | змінити статус; `If-Match: "версія"` — захист від втрати змін | 204, 400, 404, 409 |
+| `POST /api/disputes/{id}/comments` | додати коментар (вкладений масив) | 200, 400, 404, 409 |
+| `DELETE /api/disputes/{id}` | видалити спір і тему обговорення | 204, 400, 404 |
+
+Відповідність помилок статусам: `NotFoundException` → 404; `ValidationException` (FluentValidation) і `DomainException` → 400; `ConflictException` (зокрема конфлікт версій) → 409; `MongoWriteException` з DuplicateKey → 409, інші помилки запису → 400; `MongoConnectionException` / таймаут вибору сервера → 503.
+
+## Приклади (curl)
+
+```bash
+# список: платежі мерчанта 3, друга сторінка по 1
+curl "http://localhost:5100/api/disputes?merchantId=3&page=2&pageSize=1"
+
+# повнотекстовий пошук (text-індекс)
+curl "http://localhost:5100/api/disputes?search=ТелеЛінк"
+
+# відкрити спір -> 201 + Location
+curl -i -X POST http://localhost:5100/api/disputes -H "Content-Type: application/json" -d '{
+  "paymentId": 1, "invoiceId": 1, "merchantId": 1, "merchantName": "ЕнергоСвіт",
+  "amount": 500, "currency": "UAH", "reason": "duplicate",
+  "openedByUserId": "u-9", "openedByName": "Тест"}'
+
+# валідація ДО обробника -> 400 зі списком помилок (amount <= 0, невідома причина)
+curl -i -X POST http://localhost:5100/api/disputes -H "Content-Type: application/json" -d '{
+  "paymentId": 1, "invoiceId": 1, "merchantId": 1, "merchantName": "ЕнергоСвіт",
+  "amount": -5, "currency": "UAH", "reason": "unknown",
+  "openedByUserId": "u-9", "openedByName": "Тест"}'
+
+# дублікат (той самий користувач, платіж і причина) -> 400 від валідатора, а не 500
+# неіснуючий id -> 404
+curl -i http://localhost:5100/api/disputes/66f1c2000000000000000fff
+
+# конфлікт версій: PUT з застарілою версією -> 409
+curl -i -X PUT http://localhost:5100/api/disputes/<id> -H "Content-Type: application/json" -H 'If-Match: "99"' -d '{"status":"under_review"}'
+```
+
+## Самоперевірка (Лаб. 04)
+
+- `Disputes.Domain` не має посилань на інші проєкти і на `MongoDB.Driver` (`Disputes.Domain.csproj`).
+- Жоден контролер і жоден обробник з Application не звертається до `IMongoCollection` напряму.
+- Команда з `amount: -5` повертає 400 ще до виклику обробника: у лозі є `Handling CreateDisputeCommand` і `rejected by validation`, але немає `Handled CreateDisputeCommand`.
+- У Compass документ у `disputes` має структуру з Лаб. 01 без внутрішніх полів .NET; `db.disputes.getIndexes()` показує створені індекси.
+- Повторний відгук того самого користувача на той самий платіж із тієї самої причини відхиляється; повторний запуск сервісу не дублює seed-дані.

@@ -16,4 +16,12 @@ builder.AddProject<Projects.Billing_Api>("billing-api")
        .WithReference(billingDb)
        .WithExternalHttpEndpoints();
 
+// Disputes (Clean Architecture + CQRS + MongoDB, Проєкт №3): рядок підключення ConnectionStrings:DisputesDb.
+// Рядок прямо в appsettings.json цього AppHost (локальний MongoDB із Лаб. 01, адреса 127.0.0.1).
+var disputesDb = builder.AddConnectionString("DisputesDb");
+
+builder.AddProject<Projects.Disputes_WebApi>("disputes-api")
+       .WithReference(disputesDb)
+       .WithExternalHttpEndpoints();
+
 builder.Build().Run();

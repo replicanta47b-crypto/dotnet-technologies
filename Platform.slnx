@@ -14,4 +14,10 @@
     <Project Path="Services/Billing/Billing.Dal/Billing.Dal.csproj" />
     <Project Path="Services/Billing/Billing.Domain/Billing.Domain.csproj" />
   </Folder>
+  <Folder Name="/Services/Disputes/">
+    <Project Path="Services/Disputes/Disputes.WebApi/Disputes.WebApi.csproj" />
+    <Project Path="Services/Disputes/Disputes.Application/Disputes.Application.csproj" />
+    <Project Path="Services/Disputes/Disputes.Infrastructure/Disputes.Infrastructure.csproj" />
+    <Project Path="Services/Disputes/Disputes.Domain/Disputes.Domain.csproj" />
+  </Folder>
 </Solution>

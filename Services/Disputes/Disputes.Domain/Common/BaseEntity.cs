@@ -1,0 +1,18 @@
+using MongoDB.Bson;
+
+namespace Disputes.Domain.Common;
+
+/// <summary>Базова сутність для MongoDB: Id (ObjectId), аудит та Version для оптимістичної конкурентності.</summary>
+public abstract class BaseEntity
+{
+    public ObjectId Id { get; protected set; } = ObjectId.GenerateNewId();
+    public DateTime CreatedAt { get; protected set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; protected set; }
+
+    /// <summary>Версія документа: репозиторій оновлює документ лише якщо в БД лежить очікувана версія.</summary>
+    public int Version { get; protected set; }
+
+    protected void Touch() => UpdatedAt = DateTime.UtcNow;
+
+    public void BumpVersion() => Version++;
+}

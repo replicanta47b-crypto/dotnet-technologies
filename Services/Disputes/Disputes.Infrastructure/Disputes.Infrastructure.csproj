@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Infrastructure: реалізує інтерфейси з Domain/Application. Єдиний шар, що знає про MongoDB.Driver. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Disputes.Application\Disputes.Application.csproj" />
+    <ProjectReference Include="..\Disputes.Domain\Disputes.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MongoDB.Driver" Version="3.*" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.*" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.*" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.*" />
+  </ItemGroup>
+
+</Project>

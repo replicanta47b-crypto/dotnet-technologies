@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Domain: нуль посилань на інші проєкти. Лише типи BSON (ObjectId, BsonDocument) — без драйвера доступу до БД. -->
+  <ItemGroup>
+    <PackageReference Include="MongoDB.Bson" Version="3.*" />
+  </ItemGroup>
+
+</Project>

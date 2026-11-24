@@ -20,3 +20,4 @@ secrets.json
 .vscode/
 .DS_Store
 Thumbs.db
+!Services/Disputes/Disputes.WebApi/appsettings.Development.json
