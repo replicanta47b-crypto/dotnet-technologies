@@ -518,9 +518,9 @@ curl -i http://localhost:5000/api/aggregator/payments/1/full
 
 - **CorrelationId** (`X-Correlation-Id`): генерується в Gateway (або приймається від клієнта), потрапляє в `LogContext`, у відповідь,
   у тег `correlation.id` span та у вихідні запити (`DelegatingHandler`). У Dashboard → *Structured logs* фільтр
-  `CorrelationId = <значення із заголовка>` показує логи всіх сервісів ланцюжка.
+  `CorrelationId = <значення із заголовка>` (кнопка фільтра → параметр `CorrelationId`) показує логи всіх сервісів ланцюжка.
 - **Traces**: Gateway → Aggregator → сервіси → бази. Spans SQL (`OpenTelemetry.Instrumentation.SqlClient`, покриває Dapper і EF Core)
-  та MongoDB. Трасування MongoDB — вбудоване в драйвер 3.7+ (`ActivitySource "MongoDB.Driver"`, `TracingOptions`), тому окремий
+  та MongoDB. Трасування MongoDB — вбудоване в драйвер 3.7+ (`ActivitySource "MongoDB.Driver"`), тому окремий
   пакет `MongoDB.Driver.Core.Extensions.DiagnosticSources` (для драйвера 2.x) не потрібен.
 - **Serilog**: збагачення `ServiceName`, `Environment`, `MachineName`, `ThreadId`, `CorrelationId`; Console у `CompactJsonFormatter`;
   `writeToProviders: true` передає записи в OpenTelemetry (вкладка *Structured logs*). TraceId і SpanId додає провайдер OpenTelemetry.
@@ -535,3 +535,13 @@ curl -i http://localhost:5000/api/aggregator/payments/1/full
 - [ ] Пошук у Dashboard за одним CorrelationId знаходить логи Gateway, Aggregator і сервісів.
 - [ ] У trace агрегувального запиту видно SQL- і MongoDB-spans та паралельні виклики `billing-api` і `disputes-api`.
 - [ ] Зупинка `disputes-api` → часткова відповідь із `warnings`, а не 500.
+
+### Знімки екрана (Лаб. 05)
+
+| № | Що показує | Файл |
+|---|---|---|
+| 1 | Dashboard: усі 11 ресурсів (sql, mongo, бази, 3 сервіси, aggregator, gateway) у статусі Running | [docs/lab-05/1-dashboard-resources.jpg](docs/lab-05/1-dashboard-resources.jpg) |
+| 2 | Trace агрегувального запиту: gateway → aggregator → payments-api / billing-api (SQL-spans) / disputes-api (MongoDB-spans) | [docs/lab-05/2-trace-aggregator.jpg](docs/lab-05/2-trace-aggregator.jpg) |
+| 3 | Structured logs з фільтром `CorrelationId = lab05-demo-0001`: записи gateway, aggregator, disputes-api | [docs/lab-05/3-logs-by-correlation-id.jpg](docs/lab-05/3-logs-by-correlation-id.jpg) |
+
+Часткова відповідь при зупиненому `disputes-api`: `200`, платіж і рахунки на місці, `disputes: []`, `warnings: ["disputes-api is unavailable"]`.
