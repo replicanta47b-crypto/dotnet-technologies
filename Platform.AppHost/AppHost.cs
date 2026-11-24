@@ -1,5 +1,5 @@
 // AppHost: оркестрація всієї платформи однією командою (бізнес-логіки тут немає).
-// БД → сервіси → Aggregator → Gateway; усе адресується логічними іменами (service discovery).
+// БД і Redis → сервіси → Aggregator → Gateway; усе адресується логічними іменами (service discovery).
 var builder = DistributedApplication.CreateBuilder(args);
 
 // ---- контейнери баз даних (Docker Desktop має бути запущений) ----
@@ -16,20 +16,27 @@ var mongo = builder.AddMongoDB("mongo")
                    .WithDataVolume();                        // окремий volume для MongoDB
 var disputesDb = mongo.AddDatabase("DisputesDb");            // Лаб. 04: MongoDB + Clean Architecture
 
+// ---- Лаб. 06: Redis — розподілений кеш (L2) для Billing і Aggregator; рядок підключення ConnectionStrings:redis передає Aspire ----
+var redis = builder.AddRedis("redis")
+                   .WithDataVolume();                        // кеш переживає перезапуск контейнера
+
 // ---- мікросервіси: ім'я ресурсу (payments-api) = логічне ім'я для service discovery ----
-var payments = builder.AddProject<Projects.Payments_Api>("payments-api")
+// Профіль "https": окрім http (REST через Gateway) сервіс слухає https, де за ALPN узгоджується HTTP/2 для gRPC.
+var payments = builder.AddProject<Projects.Payments_Api>("payments-api", launchProfileName: "https")
                       .WithReference(paymentsDb).WaitFor(paymentsDb)
                       .WithEnvironment("Database__InitializeOnStartup", "true");   // порожня БД у контейнері → db/p1 з Лаб. 01
 
-var billing = builder.AddProject<Projects.Billing_Api>("billing-api")
-                     .WithReference(billingDb).WaitFor(billingDb);                 // міграції й seed EF Core виконує сам сервіс
+var billing = builder.AddProject<Projects.Billing_Api>("billing-api", launchProfileName: "https")
+                     .WithReference(billingDb).WaitFor(billingDb)                  // міграції й seed EF Core виконує сам сервіс
+                     .WithReference(redis).WaitFor(redis);                         // Лаб. 06: сервіс із кешем (L1 + L2)
 
-var disputes = builder.AddProject<Projects.Disputes_WebApi>("disputes-api")
+var disputes = builder.AddProject<Projects.Disputes_WebApi>("disputes-api", launchProfileName: "https")
                       .WithReference(disputesDb).WaitFor(disputesDb);              // індекси й seed створює сам сервіс
 
 // ---- Aggregator: паралельно опитує сервіси ----
 var aggregator = builder.AddProject<Projects.Platform_Aggregator>("aggregator")
                         .WithReference(payments).WithReference(billing).WithReference(disputes)
+                        .WithReference(redis).WaitFor(redis)                       // Лаб. 06: кеш агрегованих відповідей
                         .WaitFor(payments).WaitFor(billing).WaitFor(disputes);
 
 // ---- Gateway: єдина точка входу (фіксований порт 5000) ----

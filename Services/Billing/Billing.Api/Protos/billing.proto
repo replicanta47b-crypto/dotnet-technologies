@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+// Контракт gRPC-сервісу Billing (Лаб. 06). Один і той самий файл підключають сервер (Billing.Api) і клієнт (Aggregator).
+option csharp_namespace = "Platform.Contracts.Billing";
+
+package billing.v1;
+
+service BillingService {
+  // Один рахунок за ідентифікатором. Немає такого → StatusCode.NotFound.
+  rpc GetInvoice (GetInvoiceRequest) returns (InvoiceReply);
+
+  // Кілька рахунків одним викликом (батч). Відсутні ідентифікатори повертаються в missing_ids, а не помилкою.
+  rpc GetInvoices (GetInvoicesRequest) returns (GetInvoicesReply);
+}
+
+message GetInvoiceRequest {
+  int64 id = 1;
+}
+
+message GetInvoicesRequest {
+  repeated int64 ids = 1;
+}
+
+message InvoiceReply {
+  int64 id = 1;
+  string number = 2;
+  int64 merchant_id = 3;
+  string merchant_name = 4;
+  string currency = 5;
+  string total_amount = 6;   // decimal як рядок у InvariantCulture: у proto3 немає вбудованого decimal, double дає похибки
+  string due_date = 7;       // yyyy-MM-dd
+  string status = 8;
+}
+
+message GetInvoicesReply {
+  repeated InvoiceReply invoices = 1;
+  repeated int64 missing_ids = 2;
+}

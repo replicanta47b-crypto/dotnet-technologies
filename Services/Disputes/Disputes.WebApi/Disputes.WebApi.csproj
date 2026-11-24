@@ -10,6 +10,11 @@
 
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.*" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.71.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\disputes.proto" GrpcServices="Server" />
   </ItemGroup>
 
 </Project>

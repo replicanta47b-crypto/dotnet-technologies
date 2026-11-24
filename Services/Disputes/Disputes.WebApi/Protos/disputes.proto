@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+// Контракт gRPC-сервісу Disputes (Лаб. 06). Спільний для сервера (Disputes.WebApi) і клієнта (Aggregator).
+option csharp_namespace = "Platform.Contracts.Disputes";
+
+package disputes.v1;
+
+service DisputesService {
+  // Спори за платежем (з пагінацією).
+  rpc GetDisputesByPayment (GetDisputesByPaymentRequest) returns (DisputesReply);
+}
+
+message GetDisputesByPaymentRequest {
+  int64 payment_id = 1;
+  int32 page_size = 2;   // 0 → значення за замовчуванням (50)
+}
+
+message DisputeReply {
+  string id = 1;
+  int64 payment_id = 2;
+  int64 invoice_id = 3;
+  int64 merchant_id = 4;
+  string merchant_name = 5;
+  string amount = 6;     // decimal як рядок (InvariantCulture)
+  string currency = 7;
+  string reason = 8;
+  string status = 9;
+  string opened_at = 10; // ISO 8601
+  int32 comments_count = 11;
+}
+
+message DisputesReply {
+  repeated DisputeReply items = 1;
+  int64 total_count = 2;
+}

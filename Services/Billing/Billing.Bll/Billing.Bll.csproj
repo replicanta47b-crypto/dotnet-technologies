@@ -10,6 +10,11 @@
     <PackageReference Include="AutoMapper" Version="15.*" />
     <PackageReference Include="FluentValidation" Version="12.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.*" />
+    <!-- Лаб. 06: кеш L1 (IMemoryCache), L2 (IDistributedCache), метрики (IMeterFactory), IOptions -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.*" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="9.*" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.Abstractions" Version="9.*" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.*" />
   </ItemGroup>
 
 </Project>

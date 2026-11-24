@@ -3,6 +3,7 @@ using Disputes.Application.Common.Mappings;
 using Disputes.Infrastructure;
 using Disputes.Infrastructure.Persistence;
 using Disputes.WebApi.Infrastructure;
+using Disputes.WebApi.Rpc;
 using Disputes.WebApi.Mapping;
 using Platform.ServiceDefaults;
 using Serilog;
@@ -28,6 +29,9 @@ builder.Services.AddAutoMapper(cfg =>
     cfg.AddProfile<ApiMappingProfile>();
 });
 
+// ---- Лаб. 06: gRPC-сервер (контракт Protos/disputes.proto) + interceptor (CorrelationId, логування, помилки) ----
+builder.Services.AddGrpc(o => o.Interceptors.Add<GrpcServerInterceptor>());
+
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
 {
@@ -52,6 +56,7 @@ app.UseSwaggerUI();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapControllers();
+app.MapGrpcService<DisputesGrpcService>();   // gRPC поряд із REST (HTTP/2 за ALPN на https-endpoint)
 app.MapDefaultEndpoints();                       // /health (разом з MongoHealthCheck) і /alive
 
 app.Run();

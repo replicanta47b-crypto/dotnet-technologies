@@ -15,6 +15,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.*" />
+    <!-- Лаб. 06: Redis як IDistributedCache (Aspire-інтеграція) і gRPC-сервер -->
+    <PackageReference Include="Aspire.StackExchange.Redis.DistributedCaching" Version="9.5.0" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.71.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\billing.proto" GrpcServices="Server" />
   </ItemGroup>
 
 </Project>

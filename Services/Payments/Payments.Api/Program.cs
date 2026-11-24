@@ -1,4 +1,5 @@
 using Payments.Api.Infrastructure;
+using Payments.Api.Rpc;
 using Payments.Bll.Mapping;
 using Payments.Bll.Services;
 using Payments.Dal;
@@ -35,6 +36,9 @@ builder.Services.AddAutoMapper(cfg =>
     cfg.AddProfile<MappingProfile>();
 });
 
+// ---- Лаб. 06: gRPC-сервер (контракт Protos/payments.proto) + interceptor (CorrelationId, логування, помилки) ----
+builder.Services.AddGrpc(o => o.Interceptors.Add<GrpcServerInterceptor>());
+
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
 {
@@ -57,6 +61,7 @@ app.UseSwaggerUI();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapControllers();
+app.MapGrpcService<PaymentsGrpcService>();   // gRPC поряд із REST (HTTP/2 за ALPN на https-endpoint)
 app.MapDefaultEndpoints();   // /health і /alive
 
 // Лаб. 05: у контейнері SQL Server база порожня — AppHost вмикає ініціалізацію (db/p1 з Лаб. 01, ідемпотентно)

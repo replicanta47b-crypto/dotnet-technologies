@@ -1,4 +1,6 @@
 using Billing.Api.Infrastructure;
+using Billing.Api.Rpc;
+using Billing.Bll.Caching;
 using Billing.Bll.Mapping;
 using Billing.Bll.Services;
 using Billing.Bll.Validation;
@@ -26,8 +28,15 @@ builder.Services.AddDbContext<BillingDbContext>(o => o
     .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-builder.Services.AddScoped<IInvoiceService, InvoiceService>();
-builder.Services.AddScoped<IMerchantService, MerchantService>();
+
+// ---- Лаб. 06: дворівневий кеш. L2 = Redis (ресурс "redis" з AppHost, рядок ConnectionStrings:redis), L1 = IMemoryCache.
+//      IInvoiceService / IMerchantService реєструються як декоратори з кешем (див. AddBillingCaching) ----
+builder.AddRedisDistributedCache("redis");
+builder.Services.AddBillingCaching(builder.Configuration);
+builder.Services.AddHealthChecks().AddCheck<CacheHealthCheck>("cache", tags: ["ready"]);
+
+// ---- Лаб. 06: gRPC-сервер (контракт Protos/billing.proto) + interceptor логування й мапінгу помилок ----
+builder.Services.AddGrpc(o => o.Interceptors.Add<GrpcServerInterceptor>());
 
 // ---- AutoMapper 15: профілі централізовано, ліцензійний ключ — AutoMapper:LicenseKey ----
 builder.Services.AddAutoMapper(cfg =>
@@ -63,6 +72,7 @@ app.UseSwaggerUI();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapControllers();
+app.MapGrpcService<BillingGrpcService>();   // gRPC поряд із REST на тому самому Kestrel (HTTP/2 за ALPN)
 app.MapDefaultEndpoints();   // /health і /alive
 
 // ---- міграції та програмний ідемпотентний сідінг (у Production сідінг вимкнено) ----

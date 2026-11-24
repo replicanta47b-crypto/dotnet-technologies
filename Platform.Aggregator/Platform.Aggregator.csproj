@@ -8,6 +8,18 @@
 
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.*" />
+    <!-- Лаб. 06: gRPC-клієнти (контракти ті самі файли, що й на серверах) і Redis як IDistributedCache -->
+    <PackageReference Include="Grpc.Net.ClientFactory" Version="2.71.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.72.0" PrivateAssets="All" />
+    <PackageReference Include="Google.Protobuf" Version="3.31.1" />
+    <PackageReference Include="Aspire.StackExchange.Redis.DistributedCaching" Version="9.5.0" />
+  </ItemGroup>
+
+  <!-- Контракти НЕ копіюються: Link вказує на єдиний .proto сервера → клієнт і сервер завжди узгоджені -->
+  <ItemGroup>
+    <Protobuf Include="..\Services\Billing\Billing.Api\Protos\billing.proto" GrpcServices="Client" Link="Protos\billing.proto" />
+    <Protobuf Include="..\Services\Payments\Payments.Api\Protos\payments.proto" GrpcServices="Client" Link="Protos\payments.proto" />
+    <Protobuf Include="..\Services\Disputes\Disputes.WebApi\Protos\disputes.proto" GrpcServices="Client" Link="Protos\disputes.proto" />
   </ItemGroup>
 
 </Project>

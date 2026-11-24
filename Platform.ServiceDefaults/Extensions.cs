@@ -81,7 +81,10 @@ public static class Extensions
             .WithMetrics(m => m
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
-                .AddRuntimeInstrumentation())
+                .AddRuntimeInstrumentation()
+                // Лаб. 06: власні метрики кешу (cache.hits / cache.misses / cache.evictions ...) та вбудовані метрики gRPC
+                .AddMeter("Billing.Cache", "Aggregator.Cache", "Aggregator.Grpc",
+                          "Grpc.AspNetCore.Server", "Grpc.Net.Client"))
             .WithTracing(t =>
             {
                 // 100 % у Development; у Production відсоток задається змінною OTEL_TRACES_SAMPLER / OTEL_TRACES_SAMPLER_ARG

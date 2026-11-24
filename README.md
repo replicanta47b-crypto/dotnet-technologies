@@ -1,3 +1,5 @@
+> **Лаб. 06 — gRPC і дворівневе кешування (Memory + Redis).** Redis в AppHost (`AddRedis("redis").WithDataVolume()`), `.proto`-контракти й gRPC-сервіси (`GrpcServices="Server"`) у Billing/Payments/Disputes, gRPC-клієнти Aggregator (`AddGrpcClient`, service discovery, `Task.WhenAll`, `RpcException` → `warnings`), кеш L1 `IMemoryCache` (SizeLimit) → L2 `IDistributedCache` Redis (`AddRedisDistributedCache`) → БД, cache-aside з інвалідацією після запису, метрики `cache.hits`/`cache.misses` (Meter), серверний interceptor. Деталі: [docs/lab-06/README.md](docs/lab-06/README.md).
+
 # Лаб. 01 — Проєктування баз даних для мікросервісної архітектури
 
 Домен: **платіжна платформа для оплати рахунків**. Платники сплачують рахунки мерчантів (комунальні послуги, зв'язок, інтернет); мерчанти виставляють рахунки; оператори супроводжують платежі (перевірка, авторизація, списання, розрахунок) і розглядають спори. Система розбита на три автономні сервіси, кожен із власною БД.
