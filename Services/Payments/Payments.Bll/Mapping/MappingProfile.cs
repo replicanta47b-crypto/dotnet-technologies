@@ -4,7 +4,7 @@ using Payments.Domain.Models;
 
 namespace Payments.Bll.Mapping;
 
-/// <summary>Усі відображення Domain ↔ DTO в одному профілі; реєструється централізовано в AddPaymentsServices.</summary>
+/// <summary>Усі відображення Domain ↔ DTO в одному профілі; реєструється централізовано в Program.cs.</summary>
 public class MappingProfile : Profile
 {
     public MappingProfile()
