@@ -14,7 +14,6 @@ using Serilog;
 var builder = WebApplication.CreateBuilder(args);
 
 // Лаб. 05: Serilog, OpenTelemetry, CorrelationId-handler, health checks, service discovery — з ServiceDefaults
-// (SQL-команди EF Core на рівні Information вмикаються в appsettings.Development.json)
 builder.AddServiceDefaults();
 
 // ---- EF Core: рядок підключення з appsettings.json; ConnectionStrings__BillingDb (env) має пріоритет ----
