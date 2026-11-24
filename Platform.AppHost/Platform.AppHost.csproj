@@ -2,6 +2,7 @@
 
   <Sdk Name="Aspire.AppHost.Sdk" Version="9.5.0" />
 
+  <!-- AppHost посилається на всі проєкти; сервіси, Gateway і Aggregator — лише на ServiceDefaults. Ніхто не посилається на AppHost. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <UserSecretsId>platform-apphost-0b6f6c1e-5a43-4e0e-9a55-2f7a3a9d1c01</UserSecretsId>
@@ -9,12 +10,16 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.AppHost" Version="9.5.0" />
+    <PackageReference Include="Aspire.Hosting.SqlServer" Version="9.5.0" />
+    <PackageReference Include="Aspire.Hosting.MongoDB" Version="9.5.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Services\Payments\Payments.Api\Payments.Api.csproj" />
     <ProjectReference Include="..\Services\Billing\Billing.Api\Billing.Api.csproj" />
     <ProjectReference Include="..\Services\Disputes\Disputes.WebApi\Disputes.WebApi.csproj" />
+    <ProjectReference Include="..\Platform.ApiGateway\Platform.ApiGateway.csproj" />
+    <ProjectReference Include="..\Platform.Aggregator\Platform.Aggregator.csproj" />
   </ItemGroup>
 
 </Project>

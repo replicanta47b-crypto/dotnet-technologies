@@ -44,6 +44,9 @@ public sealed class PaymentService : IPaymentService
     public Task<PaymentDto> CreateAsync(CreatePaymentDto dto, CancellationToken ct = default) =>
         _uow.InTransactionAsync(async () =>
         {
+            using var activity = Telemetry.Source.StartActivity("CreatePayment");
+            activity?.SetTag("customer.id", dto.CustomerId);
+
             // ---- другий рівень валідації: бізнес-правила (перший — DataAnnotations на DTO) ----
             var currency = dto.Currency.Trim().ToUpperInvariant();
             if (!Currencies.All.Contains(currency))
@@ -75,7 +78,10 @@ public sealed class PaymentService : IPaymentService
             foreach (var a in dto.Allocations)
                 await _uow.Payments.AddAllocationAsync(paymentId, a.InvoiceId, a.Amount, Actor, ct);
 
-            _logger.LogInformation("Payment {PaymentId} created with {Count} allocation(s)", paymentId, dto.Allocations.Count);
+            activity?.SetTag("payment.id", paymentId);
+            _logger.LogInformation(
+                "Payment {PaymentId} created for customer {CustomerId}: {Currency}, {Count} allocation(s), method {Method}",
+                paymentId, dto.CustomerId, currency, dto.Allocations.Count, dto.Method);
             return await LoadAsync(paymentId, ct);
         }, _logger, ct: ct);
 
@@ -89,6 +95,10 @@ public sealed class PaymentService : IPaymentService
     public Task<PaymentDto> ChangeStatusAsync(long paymentId, ChangePaymentStatusDto dto, CancellationToken ct = default) =>
         _uow.InTransactionAsync(async () =>
         {
+            using var activity = Telemetry.Source.StartActivity("ChangePaymentStatus");
+            activity?.SetTag("payment.id", paymentId);
+            activity?.SetTag("payment.status", dto.NewStatus);
+
             if (!PaymentStatuses.All.Contains(dto.NewStatus))
                 throw new ValidationException($"Status must be one of: {string.Join(", ", PaymentStatuses.All)}.");
 

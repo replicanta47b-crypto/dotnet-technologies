@@ -4,17 +4,14 @@ using Disputes.Infrastructure;
 using Disputes.Infrastructure.Persistence;
 using Disputes.WebApi.Infrastructure;
 using Disputes.WebApi.Mapping;
+using Platform.ServiceDefaults;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ---- Serilog: структуровані логи (LoggingBehavior / PerformanceBehavior пишуть через ILogger → Serilog) ----
-builder.Host.UseSerilog((ctx, services, cfg) => cfg
-    .ReadFrom.Configuration(ctx.Configuration)
-    .ReadFrom.Services(services)
-    .Enrich.FromLogContext()
-    .WriteTo.Console(outputTemplate:
-        "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}"));
+// Лаб. 05: Serilog, OpenTelemetry, CorrelationId-handler, health checks, service discovery — з ServiceDefaults
+// (LoggingBehavior / PerformanceBehavior пишуть через ILogger → Serilog → OpenTelemetry)
+builder.AddServiceDefaults();
 
 // ---- Кожен шар надає власний метод розширення ----
 builder.Services
@@ -45,7 +42,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-app.UseMiddleware<CorrelationIdMiddleware>();   // CorrelationId, RequestPath, UserId → кожен лог
+app.UseMiddleware<CorrelationIdMiddleware>();   // X-Correlation-Id → LogContext, відповідь, span (ServiceDefaults)
 app.UseSerilogRequestLogging();                  // зовнішній: бачить фінальний статус (400/404/409), а не 500
 app.UseExceptionHandler();                       // → ApiExceptionHandler → ProblemDetails
 app.UseStatusCodePages();
@@ -54,7 +51,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
-app.MapHealthChecks("/health");
 app.MapControllers();
+app.MapDefaultEndpoints();                       // /health (разом з MongoHealthCheck) і /alive
 
 app.Run();

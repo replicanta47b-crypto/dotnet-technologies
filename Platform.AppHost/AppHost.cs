@@ -1,27 +1,42 @@
+// AppHost: оркестрація всієї платформи однією командою (бізнес-логіки тут немає).
+// БД → сервіси → Aggregator → Gateway; усе адресується логічними іменами (service discovery).
 var builder = DistributedApplication.CreateBuilder(args);
 
-// База даних: ім'я ресурсу = ім'я рядка підключення, яке читає API (ConnectionStrings:PaymentsDb).
-// Значення береться з appsettings.json цього AppHost (локальний SQL Server із Лаб. 01).
-var paymentsDb = builder.AddConnectionString("PaymentsDb");
+// ---- контейнери баз даних (Docker Desktop має бути запущений) ----
+// Пароль SQL Server — параметр-секрет: dotnet user-secrets set "Parameters:sql-password" "<пароль>" --project Platform.AppHost
+// (або вводиться в Dashboard під час першого запуску). У коді пароля немає.
+var sqlPassword = builder.AddParameter("sql-password", secret: true);
 
-// API отримує рядок підключення через WithReference → змінна ConnectionStrings__PaymentsDb
-builder.AddProject<Projects.Payments_Api>("payments-api")
-       .WithReference(paymentsDb)
-       .WithExternalHttpEndpoints();
+var sql = builder.AddSqlServer("sql", sqlPassword)
+                 .WithDataVolume();                          // дані переживають перезапуск
+var paymentsDb = sql.AddDatabase("PaymentsDb");              // Лаб. 02: SQL + ADO.NET/Dapper
+var billingDb = sql.AddDatabase("BillingDb");                // Лаб. 03: SQL + EF Core
 
-// Billing (EF Core): окремий мікросервіс зі своєю БД BillingDb (рядок підключення ConnectionStrings:BillingDb)
-var billingDb = builder.AddConnectionString("BillingDb");
+var mongo = builder.AddMongoDB("mongo")
+                   .WithDataVolume();                        // окремий volume для MongoDB
+var disputesDb = mongo.AddDatabase("DisputesDb");            // Лаб. 04: MongoDB + Clean Architecture
 
-builder.AddProject<Projects.Billing_Api>("billing-api")
-       .WithReference(billingDb)
-       .WithExternalHttpEndpoints();
+// ---- мікросервіси: ім'я ресурсу (payments-api) = логічне ім'я для service discovery ----
+var payments = builder.AddProject<Projects.Payments_Api>("payments-api")
+                      .WithReference(paymentsDb).WaitFor(paymentsDb)
+                      .WithEnvironment("Database__InitializeOnStartup", "true");   // порожня БД у контейнері → db/p1 з Лаб. 01
 
-// Disputes (Clean Architecture + CQRS + MongoDB, Проєкт №3): рядок підключення ConnectionStrings:DisputesDb.
-// Рядок прямо в appsettings.json цього AppHost (локальний MongoDB із Лаб. 01, адреса 127.0.0.1).
-var disputesDb = builder.AddConnectionString("DisputesDb");
+var billing = builder.AddProject<Projects.Billing_Api>("billing-api")
+                     .WithReference(billingDb).WaitFor(billingDb);                 // міграції й seed EF Core виконує сам сервіс
 
-builder.AddProject<Projects.Disputes_WebApi>("disputes-api")
-       .WithReference(disputesDb)
-       .WithExternalHttpEndpoints();
+var disputes = builder.AddProject<Projects.Disputes_WebApi>("disputes-api")
+                      .WithReference(disputesDb).WaitFor(disputesDb);              // індекси й seed створює сам сервіс
+
+// ---- Aggregator: паралельно опитує сервіси ----
+var aggregator = builder.AddProject<Projects.Platform_Aggregator>("aggregator")
+                        .WithReference(payments).WithReference(billing).WithReference(disputes)
+                        .WaitFor(payments).WaitFor(billing).WaitFor(disputes);
+
+// ---- Gateway: єдина точка входу (фіксований порт 5000) ----
+builder.AddProject<Projects.Platform_ApiGateway>("gateway")
+       .WithHttpEndpoint(port: 5000, name: "public")
+       .WithReference(payments).WithReference(billing).WithReference(disputes)
+       .WithReference(aggregator)
+       .WaitFor(aggregator);
 
 builder.Build().Run();

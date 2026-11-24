@@ -4,6 +4,7 @@ using Disputes.Infrastructure.Persistence;
 using Disputes.Infrastructure.Seeding;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MongoDB.Driver;
 
 namespace Disputes.Infrastructure;
 
@@ -19,8 +20,13 @@ public static class DependencyInjection
         services.PostConfigure<MongoDbOptions>(o =>
         {
             var fromAppHost = config.GetConnectionString("DisputesDb");
-            if (!string.IsNullOrWhiteSpace(fromAppHost))
-                o.ConnectionString = fromAppHost;
+            if (string.IsNullOrWhiteSpace(fromAppHost)) return;
+
+            o.ConnectionString = fromAppHost;
+            // у контейнері назва бази — з рядка підключення Aspire (…/DisputesDb?authSource=admin…)
+            var databaseName = MongoUrl.Create(fromAppHost).DatabaseName;
+            if (!string.IsNullOrWhiteSpace(databaseName))
+                o.DatabaseName = databaseName;
         });
 
         services.AddSingleton<MongoDbContext>();

@@ -5,10 +5,17 @@
     <ProjectReference Include="..\Payments.Bll\Payments.Bll.csproj" />
     <ProjectReference Include="..\Payments.Dal\Payments.Dal.csproj" />
     <ProjectReference Include="..\Payments.Domain\Payments.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Platform.ServiceDefaults\Platform.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+  <!-- скрипти бази з Лаб. 01 — поруч зі збіркою, для DatabaseInitializer (запуск у контейнері) -->
+  <ItemGroup>
+    <Content Include="..\..\..\db\p1\schema.sql" Link="db\p1\schema.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\db\p1\procedures.sql" Link="db\p1\procedures.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\db\p1\seed.sql" Link="db\p1\seed.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Serilog.AspNetCore" Version="9.*" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.*" />
   </ItemGroup>
 

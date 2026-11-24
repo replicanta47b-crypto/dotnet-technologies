@@ -8,19 +8,14 @@ using Billing.Dal.Seeding;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Platform.ServiceDefaults;
 using Serilog;
-using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ---- Serilog: структуровані логи; SQL-команди EF Core на рівні Information (видно Eager = 1 запит, Explicit = 2) ----
-builder.Host.UseSerilog((ctx, services, cfg) => cfg
-    .ReadFrom.Configuration(ctx.Configuration)
-    .ReadFrom.Services(services)
-    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Information)
-    .Enrich.FromLogContext()
-    .WriteTo.Console(outputTemplate:
-        "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}"));
+// Лаб. 05: Serilog, OpenTelemetry, CorrelationId-handler, health checks, service discovery — з ServiceDefaults
+// (SQL-команди EF Core на рівні Information вмикаються в appsettings.Development.json)
+builder.AddServiceDefaults();
 
 // ---- EF Core: рядок підключення з appsettings.json; ConnectionStrings__BillingDb (env) має пріоритет ----
 var connectionString = builder.Configuration.GetConnectionString("BillingDb")
@@ -59,7 +54,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-app.UseMiddleware<CorrelationIdMiddleware>();   // CorrelationId, RequestPath, UserId → властивості кожного логу
+app.UseMiddleware<CorrelationIdMiddleware>();   // X-Correlation-Id → LogContext, відповідь, span (ServiceDefaults)
 app.UseExceptionHandler();                       // → GlobalExceptionHandler → ProblemDetails
 app.UseStatusCodePages();
 app.UseSerilogRequestLogging();
@@ -69,6 +64,7 @@ app.UseSwaggerUI();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapControllers();
+app.MapDefaultEndpoints();   // /health і /alive
 
 // ---- міграції та програмний ідемпотентний сідінг (у Production сідінг вимкнено) ----
 if (app.Configuration.GetValue("Database:MigrateOnStartup", true))

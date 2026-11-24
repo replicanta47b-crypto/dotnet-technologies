@@ -446,3 +446,92 @@ curl -i -X PUT http://localhost:5100/api/disputes/<id> -H "Content-Type: applica
 `Services/Disputes/Disputes.Domain.Tests` — xUnit-проєкт, посилається лише на Domain (жодного звернення до MongoDB):
 некоректна сума/валюта кидає `DomainException`, дозволені й заборонені переходи статусів, заборона видалення спору «на розгляді»,
 порівняння Value Objects за значенням. Запуск: `dotnet test Platform.slnx --filter "FullyQualifiedName~Disputes.Domain.Tests"`.
+
+---
+
+# Лаб. 05. Мікросервісна платформа на .NET Aspire
+
+Три сервіси з Лаб. 02–04 (**Payments** — SQL + Dapper, **Billing** — SQL + EF Core, **Disputes** — MongoDB + Clean Architecture)
+об'єднані в одну платформу: оркестрація AppHost, спільні налаштування ServiceDefaults, єдина точка входу Gateway (YARP)
+і сервіс-агрегатор. Усе запускається однією командою.
+
+## Склад платформи
+
+| Проєкт | Призначення |
+|---|---|
+| `Platform.AppHost` | Оркестрація: контейнери SQL Server і MongoDB (з volume), сервіси, Aggregator, Gateway; порядок запуску `WaitFor`. Без бізнес-логіки. |
+| `Platform.ServiceDefaults` | `Extensions.cs`: Serilog (збагачення, JSON, передача в OpenTelemetry), OpenTelemetry (HTTP, SQL, MongoDB, OTLP), health checks, service discovery, resilience; `CorrelationId.cs`: middleware + `DelegatingHandler`. |
+| `Platform.ApiGateway` | YARP: маршрути й кластери з логічними іменами, логування маршрутизації, CorrelationId. Порт **5000**. |
+| `Platform.Aggregator` | Typed HttpClients, `Task.WhenAll`, часткові відмови, композитний DTO «картка платежу». |
+| `Services/Payments`, `Services/Billing`, `Services/Disputes` | Мікросервіси: у кожного лише `AddServiceDefaults()`, `CorrelationIdMiddleware`, `MapDefaultEndpoints()` у `Program.cs` та рядок підключення від Aspire. |
+
+Залежності: AppHost → усі проєкти; сервіси, Gateway і Aggregator → лише ServiceDefaults; ніхто не посилається на AppHost.
+
+## Запуск
+
+Потрібні: .NET 9 SDK (або новіший з таргетом net9.0), **запущений Docker Desktop**.
+
+```bash
+# 1) пароль SQL Server — параметр-секрет (у коді його немає); має відповідати вимогам складності SQL Server
+dotnet user-secrets set "Parameters:sql-password" "Str0ng!Passw0rd" --project Platform.AppHost
+
+# 2) усе разом: контейнери SQL Server і MongoDB, три сервіси, Aggregator, Gateway
+dotnet run --project Platform.AppHost
+```
+
+Якщо секрет не задано, Aspire запитає значення в Dashboard під час першого запуску. Dashboard відкривається за адресою з
+консолі AppHost (за замовчуванням `http://localhost:15170`). Усі ресурси мають стати **Running**.
+
+Бази створюються автоматично: Payments застосовує `db/p1` (Лаб. 01; ідемпотентно, лише коли AppHost вмикає
+`Database__InitializeOnStartup`), Billing — міграції й seed EF Core, Disputes — індекси й seed MongoDB.
+Дані зберігаються у volume між перезапусками.
+
+## Gateway: `http://localhost:5000`
+
+| Шлях через Gateway | Куди |
+|---|---|
+| `/api/payments/**`, `/api/customers/**`, `/api/invoices/**` | `payments-api` |
+| `/api/billing/**` (→ `/api/**` у Billing, напр. `/api/billing/invoices/1`), `/api/merchants/**`, `/api/categories/**` | `billing-api` |
+| `/api/disputes/**` | `disputes-api` |
+| `/api/aggregator/**` | `aggregator` |
+
+Payments і Billing обидва мають `/api/invoices`, тому рахунки Billing доступні через Gateway під префіксом `/api/billing`
+(YARP-трансформація `PathRemovePrefix` + `PathPrefix`).
+
+```bash
+curl -i http://localhost:5000/api/payments/1              # у відповіді заголовок X-Correlation-Id
+curl -i http://localhost:5000/api/billing/invoices/1
+curl -i "http://localhost:5000/api/disputes?pageSize=5"
+curl -i http://localhost:5000/api/aggregator/payments/1/full
+```
+
+## Aggregator: картка платежу
+
+`GET /api/aggregator/payments/{id}/full` — платіж (`payments-api`) запитується першим, далі **паралельно** (`Task.WhenAll`)
+рахунки з `billing-api` (за позиціями розподілу) і спори з `disputes-api`. Якщо один із сервісів недоступний, відповідь
+містить решту даних і `warnings`, а не 500. Якщо недоступний сам `payments-api` — 503 (без платежу агрегувати нічого).
+
+Перевірка часткової відмови: у Dashboard зупиніть `disputes-api` → запит повертає платіж і рахунки та
+`"warnings": ["disputes-api is unavailable"]`; запустіть сервіс знову → відповідь знову повна.
+
+## Спостережуваність
+
+- **CorrelationId** (`X-Correlation-Id`): генерується в Gateway (або приймається від клієнта), потрапляє в `LogContext`, у відповідь,
+  у тег `correlation.id` span та у вихідні запити (`DelegatingHandler`). У Dashboard → *Structured logs* фільтр
+  `CorrelationId = <значення із заголовка>` показує логи всіх сервісів ланцюжка.
+- **Traces**: Gateway → Aggregator → сервіси → бази. Spans SQL (`OpenTelemetry.Instrumentation.SqlClient`, покриває Dapper і EF Core)
+  та MongoDB. Трасування MongoDB — вбудоване в драйвер 3.7+ (`ActivitySource "MongoDB.Driver"`, `TracingOptions`), тому окремий
+  пакет `MongoDB.Driver.Core.Extensions.DiagnosticSources` (для драйвера 2.x) не потрібен.
+- **Serilog**: збагачення `ServiceName`, `Environment`, `MachineName`, `ThreadId`, `CorrelationId`; Console у `CompactJsonFormatter`;
+  `writeToProviders: true` передає записи в OpenTelemetry (вкладка *Structured logs*). TraceId і SpanId додає провайдер OpenTelemetry.
+- Бізнес-події й власні spans: `CreatePayment`, `ChangePaymentStatus` (Payments), `CreateInvoice`, `ChangeInvoiceStatus` (Billing),
+  `CreateDispute`, `ChangeDisputeStatus` (Disputes) — `ActivitySource` з іменем збірки сервісу.
+
+## Самоперевірка (Лаб. 05)
+
+- [ ] `dotnet build Platform.slnx` без помилок; `Platform.AppHost` посилається на всі проєкти, сервіси — лише на `Platform.ServiceDefaults`.
+- [ ] У Dashboard усі ресурси (sql, mongo, три сервіси, aggregator, gateway) у статусі Running.
+- [ ] `curl -i http://localhost:5000/api/payments/1` → 200 і заголовок `X-Correlation-Id`.
+- [ ] Пошук у Dashboard за одним CorrelationId знаходить логи Gateway, Aggregator і сервісів.
+- [ ] У trace агрегувального запиту видно SQL- і MongoDB-spans та паралельні виклики `billing-api` і `disputes-api`.
+- [ ] Зупинка `disputes-api` → часткова відповідь із `warnings`, а не 500.

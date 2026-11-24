@@ -4,15 +4,21 @@ using Disputes.Domain.Enums;
 using Disputes.Domain.Exceptions;
 using Disputes.Domain.Interfaces;
 using Disputes.Domain.ValueObjects;
+using Disputes.Application.Common;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 namespace Disputes.Application.Commands.CreateDispute;
 
-public class CreateDisputeCommandHandler(IDisputeRepository disputes, IDisputeThreadRepository threads)
+public class CreateDisputeCommandHandler(
+    IDisputeRepository disputes, IDisputeThreadRepository threads, ILogger<CreateDisputeCommandHandler> logger)
     : IRequestHandler<CreateDisputeCommand, string>
 {
     public async Task<string> Handle(CreateDisputeCommand cmd, CancellationToken ct)
     {
+        using var activity = Telemetry.Source.StartActivity("CreateDispute");
+        activity?.SetTag("payment.id", cmd.PaymentId);
+
         if (!EnumText.TryParse<DisputeReason>(cmd.Reason, out var reason))
             throw new DomainException($"Unknown reason '{cmd.Reason}'");
 
@@ -27,6 +33,11 @@ public class CreateDisputeCommandHandler(IDisputeRepository disputes, IDisputeTh
 
         await disputes.AddAsync(dispute, ct);
         await threads.AddAsync(thread, ct);
+
+        activity?.SetTag("dispute.id", dispute.Id.ToString());
+        logger.LogInformation(
+            "Dispute {DisputeId} opened for payment {PaymentId}: {Amount} {Currency}, reason {Reason}, merchant {MerchantId}",
+            dispute.Id, cmd.PaymentId, cmd.Amount, cmd.Currency, cmd.Reason, cmd.MerchantId);
 
         return dispute.Id.ToString();
     }

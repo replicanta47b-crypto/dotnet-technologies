@@ -5,10 +5,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Disputes.Application\Disputes.Application.csproj" />
     <ProjectReference Include="..\Disputes.Infrastructure\Disputes.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\Platform.ServiceDefaults\Platform.ServiceDefaults.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Serilog.AspNetCore" Version="9.*" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.*" />
   </ItemGroup>
 

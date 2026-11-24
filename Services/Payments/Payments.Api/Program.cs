@@ -3,15 +3,13 @@ using Payments.Bll.Mapping;
 using Payments.Bll.Services;
 using Payments.Dal;
 using Payments.Dal.Interfaces;
+using Platform.ServiceDefaults;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Serilog: рівні й приймачі — з конфігурації (appsettings.json, секція Serilog)
-builder.Host.UseSerilog((ctx, services, cfg) => cfg
-    .ReadFrom.Configuration(ctx.Configuration)
-    .ReadFrom.Services(services)
-    .Enrich.FromLogContext());
+// Лаб. 05: Serilog, OpenTelemetry, CorrelationId-handler, health checks, service discovery — з ServiceDefaults
+builder.AddServiceDefaults();
 
 // Рядок підключення: appsettings.json, але змінна середовища ConnectionStrings__PaymentsDb (Aspire) має пріоритет
 var connectionString = builder.Configuration.GetConnectionString("PaymentsDb") ?? string.Empty;
@@ -49,6 +47,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+app.UseMiddleware<CorrelationIdMiddleware>();   // X-Correlation-Id → LogContext, відповідь, span
 app.UseExceptionHandler();      // → DomainExceptionHandler → ProblemDetails
 app.UseStatusCodePages();       // 404 для невідомих маршрутів теж у форматі ProblemDetails
 app.UseSerilogRequestLogging();
@@ -58,5 +57,10 @@ app.UseSwaggerUI();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapControllers();
+app.MapDefaultEndpoints();   // /health і /alive
+
+// Лаб. 05: у контейнері SQL Server база порожня — AppHost вмикає ініціалізацію (db/p1 з Лаб. 01, ідемпотентно)
+if (app.Configuration.GetValue("Database:InitializeOnStartup", false))
+    await DatabaseInitializer.InitializeAsync(connectionString, Path.Combine(AppContext.BaseDirectory, "db", "p1"), app.Logger);
 
 app.Run();

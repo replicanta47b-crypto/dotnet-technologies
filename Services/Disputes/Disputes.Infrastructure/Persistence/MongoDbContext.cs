@@ -21,7 +21,10 @@ public class MongoDbContext
         if (string.IsNullOrWhiteSpace(settings.DatabaseName))
             throw new InvalidOperationException("MongoDb:DatabaseName is not configured.");
 
-        Client = new MongoClient(settings.ConnectionString);
+        var clientSettings = MongoClientSettings.FromConnectionString(settings.ConnectionString);
+        // драйвер 3.7+ сам створює spans (ActivitySource "MongoDB.Driver"); ServiceDefaults підписується на нього
+        clientSettings.TracingOptions = new TracingOptions { Disabled = false, QueryTextMaxLength = 0 };
+        Client = new MongoClient(clientSettings);
         Database = Client.GetDatabase(settings.DatabaseName);
     }
 

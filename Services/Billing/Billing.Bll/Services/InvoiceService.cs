@@ -1,4 +1,5 @@
 using AutoMapper;
+using Billing.Bll.Common;
 using Billing.Bll.Dto;
 using Billing.Dal.Interfaces;
 using Billing.Dal.Specifications;
@@ -82,6 +83,9 @@ public class InvoiceService : IInvoiceService
 
     public async Task<InvoiceDetailsDto> CreateAsync(CreateInvoiceDto input, CancellationToken ct = default)
     {
+        using var activity = Telemetry.Source.StartActivity("CreateInvoice");
+        activity?.SetTag("merchant.id", input.MerchantId);
+
         var merchant = await _uow.Merchants.GetByIdAsync(input.MerchantId, ct)
                        ?? throw new EntityNotFoundException(nameof(Merchant), input.MerchantId);
         if (!merchant.IsActive)
@@ -99,8 +103,10 @@ public class InvoiceService : IInvoiceService
 
         await _uow.Invoices.AddAsync(invoice, ct);
         await _uow.SaveChangesAsync(ct);
-        _logger.LogInformation("Invoice {InvoiceId} {InvoiceNumber} created for merchant {MerchantId}",
-            invoice.Id, invoice.Number, invoice.MerchantId);
+        activity?.SetTag("invoice.id", invoice.Id);
+        _logger.LogInformation(
+            "Invoice {InvoiceId} {InvoiceNumber} created for merchant {MerchantId}: {Currency}, {LinesCount} line(s), due {DueDate}",
+            invoice.Id, invoice.Number, invoice.MerchantId, invoice.Currency, input.Lines.Count, input.DueDate);
 
         return await GetByIdAsync(invoice.Id, ct);
     }
@@ -141,6 +147,9 @@ public class InvoiceService : IInvoiceService
 
     private async Task<InvoiceDetailsDto> MutateAsync(long id, Action<Invoice> change, CancellationToken ct)
     {
+        using var activity = Telemetry.Source.StartActivity("ChangeInvoiceStatus");
+        activity?.SetTag("invoice.id", id);
+
         var invoice = await RequireAsync(id, ct);
         change(invoice);                             // правила переходів — всередині сутності (DomainException → 409)
         await _uow.SaveChangesAsync(ct);             // один SaveChanges — одна транзакція
