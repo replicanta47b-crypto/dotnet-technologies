@@ -22,8 +22,7 @@ public class MongoDbContext
             throw new InvalidOperationException("MongoDb:DatabaseName is not configured.");
 
         var clientSettings = MongoClientSettings.FromConnectionString(settings.ConnectionString);
-        // драйвер 3.7+ сам створює spans (ActivitySource "MongoDB.Driver"); ServiceDefaults підписується на нього
-        clientSettings.TracingOptions = new TracingOptions { Disabled = false, QueryTextMaxLength = 0 };
+        // драйвер 3.7+ сам створює spans (ActivitySource "MongoDB.Driver") — ServiceDefaults підписується на нього
         Client = new MongoClient(clientSettings);
         Database = Client.GetDatabase(settings.DatabaseName);
     }

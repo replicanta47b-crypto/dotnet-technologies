@@ -3,6 +3,7 @@
   <!-- Спільні налаштування для всіх проєктів рішення.
        Щоб перейти на іншу версію .NET, змініть лише TargetFramework (net8.0 / net9.0 / net10.0). -->
   <PropertyGroup>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
