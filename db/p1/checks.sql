@@ -19,6 +19,7 @@ BEGIN TRY
     EXEC dbo.usp_ChangePaymentStatus @PaymentId = 2, @NewStatus = 'Captured';
 END TRY
 BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;   -- XACT_ABORT ON у процедурі лишає транзакцію «неспроможною» (3930) — закриваємо її
     SELECT ERROR_NUMBER() AS ErrNo, ERROR_MESSAGE() AS ErrMsg;   -- 50002 Invalid status transition
 END CATCH;
 
@@ -27,6 +28,7 @@ BEGIN TRY
     EXEC dbo.usp_ChangePaymentStatus @PaymentId = 1, @NewStatus = 'Cancelled';
 END TRY
 BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;   -- XACT_ABORT ON у процедурі лишає транзакцію «неспроможною» (3930) — закриваємо її
     SELECT ERROR_NUMBER() AS ErrNo, ERROR_MESSAGE() AS ErrMsg;
 END CATCH;
 
@@ -36,6 +38,7 @@ BEGIN TRY
          @ExpectedRowVersion = 0x0000000000000001;
 END TRY
 BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;   -- XACT_ABORT ON у процедурі лишає транзакцію «неспроможною» (3930) — закриваємо її
     SELECT ERROR_NUMBER() AS ErrNo, ERROR_MESSAGE() AS ErrMsg;
 END CATCH;
 
@@ -61,6 +64,7 @@ BEGIN TRY
     EXEC dbo.usp_AddPaymentAllocation @PaymentId = 2, @InvoiceId = 4;   -- вже розподілено -> 50013
 END TRY
 BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;   -- XACT_ABORT ON у процедурі лишає транзакцію «неспроможною» (3930) — закриваємо її
     SELECT ERROR_NUMBER() AS ErrNo, ERROR_MESSAGE() AS ErrMsg;
 END CATCH;
 
@@ -69,5 +73,6 @@ BEGIN TRY
     EXEC dbo.usp_SoftDeletePayment @PaymentId = 1;
 END TRY
 BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;   -- XACT_ABORT ON у процедурі лишає транзакцію «неспроможною» (3930) — закриваємо її
     SELECT ERROR_NUMBER() AS ErrNo, ERROR_MESSAGE() AS ErrMsg;
 END CATCH;
