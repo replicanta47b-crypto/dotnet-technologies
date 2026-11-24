@@ -1,0 +1,22 @@
+# Visual Studio / .NET
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+*.rsuser
+[Dd]ebug/
+[Rr]elease/
+TestResults/
+*.log
+
+# Secrets and local settings
+.env
+appsettings.Development.json
+secrets.json
+
+# VS Code / OS
+.vscode/
+.DS_Store
+Thumbs.db
