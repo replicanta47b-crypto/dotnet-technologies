@@ -429,3 +429,14 @@ curl -i -X PUT http://localhost:5100/api/disputes/<id> -H "Content-Type: applica
 - Команда з `amount: -5` повертає 400 ще до виклику обробника: у лозі є `Handling CreateDisputeCommand` і `rejected by validation`, але немає `Handled CreateDisputeCommand`.
 - У Compass документ у `disputes` має структуру з Лаб. 01 без внутрішніх полів .NET; `db.disputes.getIndexes()` показує створені індекси.
 - Повторний відгук того самого користувача на той самий платіж із тієї самої причини відхиляється; повторний запуск сервісу не дублює seed-дані.
+
+### Знімки екрана (Лаб. 04)
+
+| № | Що показує | Файл |
+|---|---|---|
+| 1 | Swagger: усі ендпоінти Disputes API | [docs/lab-04/1-swagger.jpg](docs/lab-04/1-swagger.jpg) |
+| 2 | 400 на невалідний ObjectId | [docs/lab-04/2-invalid-objectid-400.jpg](docs/lab-04/2-invalid-objectid-400.jpg) |
+| 3 | Лог: валідація відхиляє команду до обробника (немає `Handled`) | [docs/lab-04/3-log-validation-before-handler.jpg](docs/lab-04/3-log-validation-before-handler.jpg) |
+| 4 | Лог: 409 при конфлікті версій (`If-Match`) | [docs/lab-04/4-log-409-version-conflict.jpg](docs/lab-04/4-log-409-version-conflict.jpg) |
+| 5 | Compass: документ `disputes` (camelCase, вкладені `openedBy`, `comments`) | [docs/lab-04/5-compass-disputes-document.jpg](docs/lab-04/5-compass-disputes-document.jpg) |
+| 6 | Compass: індекси колекції `disputes` | [docs/lab-04/6-compass-indexes.jpg](docs/lab-04/6-compass-indexes.jpg) |
