@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- DbContext, Fluent API-конфігурації, міграції, репозиторії, Unit of Work, специфікації, сідінг. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Billing.Domain\Billing.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.*" />
+    <PackageReference Include="Ardalis.Specification" Version="9.*" />
+    <PackageReference Include="Ardalis.Specification.EntityFrameworkCore" Version="9.*" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Сервіси бізнес-логіки, DTO, мапінг, валідатори. З EF Core напряму не працює — лише через репозиторії та Unit of Work. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Billing.Dal\Billing.Dal.csproj" />
+    <ProjectReference Include="..\Billing.Domain\Billing.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoMapper" Version="15.*" />
+    <PackageReference Include="FluentValidation" Version="12.*" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.*" />
+  </ItemGroup>
+
+</Project>

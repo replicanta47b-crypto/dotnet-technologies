@@ -227,3 +227,106 @@ curl -i -X DELETE $BASE/api/payments/2                                       # 2
 - [ ] Повторний недопустимий перехід статусу → 409
 - [ ] Невідомий Id → 404; некоректне тіло → 400; відкат транзакції при штучному збої
 - [ ] Aspire Dashboard: `payments-api` у стані Running; Swagger відкривається
+
+---
+
+# Лаб. 03 — Мікросервіс Billing на EF Core (Code First)
+
+Другий мікросервіс платформи: контекст «Білінг» (Проєкт №2 з Лаб. 01). На відміну від Payments (ADO.NET + Dapper), доступ до даних тут побудований на **EF Core**: моделі, Fluent API, міграції, LINQ to Entities.
+
+```
+Services/Billing/
+  Billing.Domain/   сутності з інкапсульованими правилами, доменні винятки
+  Billing.Dal/      BillingDbContext, Configurations/, Migrations/, репозиторії, Unit of Work, Specifications/, Seeding/
+  Billing.Bll/      сервіси, DTO, профіль AutoMapper, FluentValidation-валідатори
+  Billing.Api/      контролери, Program.cs, ProblemDetails-обробник, Serilog, Swagger, Dockerfile
+```
+
+## Модель (Code First)
+
+| Зв'язок | Реалізація |
+|---|---|
+| 1:N | `Merchant → Invoice` (Restrict: мерчант з рахунками не видаляється), `Invoice → InvoiceLine` (Cascade) |
+| 1:1 | `Invoice ↔ InvoiceDetail` (PK = FK) |
+| M:N | `Invoice ↔ ServiceCategory` через явну сутність `InvoiceCategory` (складений ключ, власні поля `AssignedAt`, `IsPrimary`; унікальний фільтрований індекс «одна основна категорія») |
+
+Бізнес-правила — у сутності `Invoice` (приватні setter-и, валідація в конструкторі; методи `AddLine`, `Issue`, `MarkPaid`, `Void`, `Reschedule`, `AssignCategory`, `MarkDeleted`). Також: `decimal(18,2)`, CHECK-обмеження, унікальні індекси, `rowversion`, м'яке видалення (global query filter), обчислюваний стовпець `LineTotal`.
+Кожна сутність має окремий `IEntityTypeConfiguration<T>`; усі підключаються в `OnModelCreating` через `ApplyConfigurationsFromAssembly`.
+
+## Репозиторії, Unit of Work, специфікації
+
+- `GenericRepository<T>` на `DbSet<T>`: `GetByIdAsync`, `GetAllAsync`, `AddAsync`, `Update`, `Delete` + `ListAsync/CountAsync(spec)`. Репозиторії самі не зберігають — лише `UnitOfWork.SaveChangesAsync()` (один виклик наприкінці операції, одна транзакція).
+- **Eager Loading** — `InvoiceRepository.GetWithDetailsAsync` (`Include/ThenInclude`, один запит).
+- **Explicit Loading** — `MerchantRepository.GetWithInvoicesAsync` (`Entry(...).Collection(...).Query().LoadAsync`, два запити).
+- **LINQ M:N** — `InvoiceCategoryRepository.GetRecentlyAssignedAsync` (через проміжну сутність і `AssignedAt`).
+- **Specification pattern** (Ardalis.Specification): `InvoicesFilterSpec`, `InvoicesPageSpec`, `OverdueInvoicesSpec`; репозиторій застосовує будь-яку через `WithSpecification(spec)`.
+
+## API
+
+| Метод | Шлях | Результат |
+|---|---|---|
+| GET | `/api/invoices?page=&pageSize=&search=&status=&merchantId=&minAmount=&maxAmount=&sortBy=number\|amount\|dueDate&sortDir=` | 200, `PagedResult` |
+| GET | `/api/invoices/{id}` | 200 / 404 (Eager) |
+| GET | `/api/invoices/overdue` | 200 (друга специфікація) |
+| GET | `/api/categories/{slug}/invoices?since=` | 200 (M:N) |
+| POST | `/api/invoices` | 201 + Location / 400 / 404 / 409 |
+| POST | `/api/invoices/{id}/pay`, `/void`, `/categories`; PUT `/due-date` | 200 / 404 / 409 |
+| DELETE | `/api/invoices/{id}` | 204 (лише Draft/Void) |
+| GET/POST | `/api/merchants`, GET `/api/merchants/{id}` | Explicit Loading |
+
+Формат пагінації: тіло `{ items, totalCount, page, pageSize, totalPages, hasNext, hasPrevious }` + заголовки `X-Total-Count`, `X-Total-Pages`. `pageSize` за замовчуванням 20, максимум 100. Фільтрація, сортування (лише дозволені поля) і `Skip/Take` виконуються в SQL.
+
+Помилки (ProblemDetails): `EntityNotFoundException` → 404, `ValidationException` → 400, `ConflictException`/`DomainException` → 409, решта → 500 (деталі лише в Development). Валідація: DataAnnotations на DTO + FluentValidation (явний виклик у контролері → `ValidationProblemDetails`).
+
+## Запуск і міграції
+
+Потрібно: .NET SDK 9, SQL Server, `dotnet tool install --global dotnet-ef`.
+БД створюється **з моделей** міграцією; за замовчуванням це **нова база `BillingEfDb`** (щоб не конфліктувати з `BillingDb`, створеною скриптом `db/p2/schema.sql`). Рядок підключення — `Services/Billing/Billing.Api/appsettings.json` або змінна `ConnectionStrings__BillingDb`.
+
+```bash
+# міграція вже є в репозиторії; застосувати вручну (необов'язково — API робить Migrate при старті):
+dotnet ef database update --project Services/Billing/Billing.Dal --startup-project Services/Billing/Billing.Api --environment Development
+
+# згенерувати SQL-скрипт міграції
+dotnet ef migrations script --idempotent --project Services/Billing/Billing.Dal --startup-project Services/Billing/Billing.Api -o db/p2/billing-ef-migration.sql
+
+# (за потреби) перестворити початкову міграцію «з нуля»
+#   видаліть папку Services/Billing/Billing.Dal/Migrations, потім:
+dotnet ef migrations add InitialCreate --project Services/Billing/Billing.Dal --startup-project Services/Billing/Billing.Api
+```
+
+Запуск: `dotnet run --project Services/Billing/Billing.Api` → Swagger `http://localhost:5090/swagger`, або `dotnet run --project Platform.AppHost` (ресурс `billing-api` поруч з `payments-api`). Docker: `docker build -f Services/Billing/Billing.Api/Dockerfile -t billing-api .`
+
+**Сідінг** ідемпотентний: довідники (мерчанти, категорії) — `HasData` у конфігураціях; рахунки, рядки, деталі, категорії — `DbInitializer` після `MigrateAsync()` з перевіркою наявності (вимикається в Production або `Database:Seed=false`). Дані збігаються з `db/p2/seed.sql`.
+
+**Логи SQL.** Serilog виводить команди EF Core (`Microsoft.EntityFrameworkCore.Database.Command`): `GET /api/invoices/1` — один SELECT з JOIN (Eager); `GET /api/merchants/1` — два SELECT (Explicit).
+
+## Приклади
+
+```bash
+BASE=http://localhost:5090
+curl "$BASE/api/invoices?page=2&pageSize=2&sortBy=amount&sortDir=desc"
+curl "$BASE/api/invoices?status=Issued&minAmount=300"
+curl $BASE/api/invoices/1
+curl $BASE/api/merchants/1
+curl "$BASE/api/categories/utilities/invoices?since=2020-01-01"
+curl $BASE/api/invoices/overdue
+
+curl -X POST $BASE/api/invoices -H "Content-Type: application/json" -d '{
+  "number":"INV-2026-0100","merchantId":1,"currency":"UAH","dueDate":"2026-12-20",
+  "customerRef":"ACC-100234","lines":[{"description":"Електроенергія","quantity":100,"unitPrice":4.8}]}'
+# повторити той самий запит -> 409 (дубль номера)
+
+curl -i -X POST $BASE/api/invoices -H "Content-Type: application/json" -d '{"number":"","merchantId":1,"lines":[]}'  # 400 з переліком полів
+curl -i $BASE/api/invoices/999999                                                                                    # 404 ProblemDetails
+curl -i -X POST $BASE/api/invoices/1/void                                                                            # 409 (Paid не анулюється)
+```
+
+## Самоперевірка (Лаб. 03)
+
+- [ ] `dotnet build Platform.slnx` без помилок; міграція застосовується до порожньої БД
+- [ ] `GET /api/invoices?page=2&pageSize=5` повертає `totalCount` усіх записів, а не сторінки
+- [ ] POST з порожнім `number` → 400 з полями; повторний номер → 409; неіснуючий Id → 404
+- [ ] Повторний запуск застосунку не дублює seed-дані
+- [ ] У лозі SQL: Eager — 1 запит, Explicit — 2
+- [ ] `/api/invoices/overdue` працює через ту саму `ListAsync(spec)` без змін у репозиторії

@@ -8,4 +8,10 @@
     <Project Path="Services/Payments/Payments.Dal/Payments.Dal.csproj" />
     <Project Path="Services/Payments/Payments.Domain/Payments.Domain.csproj" />
   </Folder>
+  <Folder Name="/Services/Billing/">
+    <Project Path="Services/Billing/Billing.Api/Billing.Api.csproj" />
+    <Project Path="Services/Billing/Billing.Bll/Billing.Bll.csproj" />
+    <Project Path="Services/Billing/Billing.Dal/Billing.Dal.csproj" />
+    <Project Path="Services/Billing/Billing.Domain/Billing.Domain.csproj" />
+  </Folder>
 </Solution>

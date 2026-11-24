@@ -9,4 +9,11 @@ builder.AddProject<Projects.Payments_Api>("payments-api")
        .WithReference(paymentsDb)
        .WithExternalHttpEndpoints();
 
+// Billing (EF Core): окремий мікросервіс зі своєю БД BillingDb (рядок підключення ConnectionStrings:BillingDb)
+var billingDb = builder.AddConnectionString("BillingDb");
+
+builder.AddProject<Projects.Billing_Api>("billing-api")
+       .WithReference(billingDb)
+       .WithExternalHttpEndpoints();
+
 builder.Build().Run();
