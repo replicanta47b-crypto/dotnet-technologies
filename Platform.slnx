@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/Platform/">
+    <Project Path="Platform.AppHost/Platform.AppHost.csproj" />
+  </Folder>
+  <Folder Name="/Services/Payments/">
+    <Project Path="Services/Payments/Payments.Api/Payments.Api.csproj" />
+    <Project Path="Services/Payments/Payments.Bll/Payments.Bll.csproj" />
+    <Project Path="Services/Payments/Payments.Dal/Payments.Dal.csproj" />
+    <Project Path="Services/Payments/Payments.Domain/Payments.Domain.csproj" />
+  </Folder>
+</Solution>

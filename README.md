@@ -128,3 +128,102 @@ EXEC dbo.usp_ChangePaymentStatus @PaymentId = 2, @NewStatus = 'Captured';
 2. Виклик `usp_ChangePaymentStatus @PaymentId = 2, @NewStatus = 'Captured'` повертає помилку 50002 і не змінює статус.
 3. `db.disputes.find()` у `disputes_db` повертає документи з різними наборами полів (`evidence`, `fraudDetails`, `serviceProof`, `tags`).
 4. Повторний запуск `seed.sql` / `seed.js` не збільшує кількість рядків і документів.
+
+---
+
+# Лаб. 02 — Мікросервіс Payments: ADO.NET + Dapper, UoW, Generic Repository, Aspire
+
+Тришарова архітектура (вертикальний зріз) для сервісу платежів поверх `PaymentsDb` з Лаб. 01.
+
+```
+Platform.slnx
+Platform.AppHost/                 .NET Aspire AppHost (AppHost.cs) — запускає API разом з БД
+Services/Payments/
+  Payments.Domain/                моделі, константи, доменні винятки (NotFound / BusinessConflict / Validation)
+  Payments.Dal/                   IGenericRepository<T>, репозиторії (ADO.NET, Dapper), UnitOfWork
+  Payments.Bll/                   DTO, профіль AutoMapper, сервіси, реєстрація DI
+  Payments.Api/                   контролери, ProblemDetails-обробник, Swagger, Serilog, appsettings
+```
+
+Залежності: `Api → Bll → Dal → Domain` (Api також бачить Dal лише для DI-складання).
+
+## Ключові рішення
+
+| Тема | Рішення |
+|---|---|
+| Generic Repository | `IGenericRepository<T>` (Get/GetAll/Add/Delete) повертає моделі, не `DataReader`. `IInvoiceRepository`, `IPaymentRepository` успадковують його і додають специфічні методи |
+| Чистий ADO.NET | `CustomerRepository` — `SqlCommand`, `SqlParameter`, `SqlDataReader`; інтерфейс `ICustomerRepository` **не** успадковує generic |
+| Dapper | `BaseDapperRepository<T>` (спільний async-CRUD) → `InvoiceRepository`, `PaymentRepository`; multi-mapping (`Payment + PaymentDetails + PaymentAllocation`, `splitOn`), виклики збережених процедур Лаб. 01 |
+| SQL | Усі значення — параметрами; імена таблиць — константи коду; з'єднання/команди/рідери в `using` / `await using` |
+| Unit of Work | Одне `SqlConnection` + одна `SqlTransaction` на HTTP-запит (Scoped). `BeginTransactionAsync(IsolationLevel)`, `CommitAsync`, `RollbackAsync` (враховує «зомбі»-транзакцію після `XACT_ABORT`), `DisposeAsync` |
+| Транзакційна операція | `PaymentService.CreateAsync`: клієнт → платіж → деталі → розподіл на рахунки (знімок номера й суми рахунку робить `usp_AddPaymentAllocation`). Збій будь-якого кроку відкочує все |
+| DTO / AutoMapper | DTO окремо від моделей; `MappingProfile` реєструється в одному місці (`AddPaymentsServices`), ліцензійний ключ — `AutoMapper:LicenseKey` |
+| Валидація | 1-й рівень — DataAnnotations на DTO (→ 400); 2-й — бізнес-правила в BLL (валюта, метод, дублікати рахунків, унікальність e-mail, збіг валют) |
+| Помилки | `SqlExceptionTranslator`: 50001/50006/50008 → NotFound; 50002–50014, 2601/2627, 547 → BusinessConflict. `DomainExceptionHandler` (IExceptionHandler + ProblemDetails): 404 / 409 / 400 / 500 |
+| Контролери | Тонкі, async, attribute routing, `CancellationToken`, `CreatedAtAction`, Swagger з `ProducesResponseType` |
+| Конфігурація | Рядок підключення — `appsettings.json`; перекривається змінною `ConnectionStrings__PaymentsDb` |
+| Логування | Serilog (консоль), request logging |
+
+## Запуск через Aspire
+
+Потрібно: .NET SDK 9 (для `.slnx` — 9.0.200+), БД `PaymentsDb` з Лаб. 01 (`db/p1/schema.sql`, `procedures.sql`, `seed.sql`).
+
+1. Перевірте рядок підключення в `Platform.AppHost/appsettings.json` (за замовчуванням `localhost\MSSQLSERVER01`, Windows-автентифікація, `TrustServerCertificate=true`).
+2. Збірка: `dotnet build Platform.slnx`
+3. Запуск: `dotnet run --project Platform.AppHost` (або F5 у Visual Studio / VS Code на `Platform.AppHost`).
+4. Відкрийте Aspire Dashboard за адресою з консолі (`http://localhost:15170`): ресурс `payments-api` має стан **Running**. У ньому ж видно посилання на API.
+5. Swagger: `http://localhost:5080/swagger` (порт API також видно в дашборді).
+
+Без Aspire: `dotnet run --project Services/Payments/Payments.Api` (Swagger на `http://localhost:5080/swagger`).
+
+Інший сервер БД без правки файлів:
+`set ConnectionStrings__PaymentsDb=Server=...;Database=PaymentsDb;...` (PowerShell: `$env:ConnectionStrings__PaymentsDb="..."`).
+
+Ліцензійний ключ AutoMapper 15 (за наявності): `dotnet user-secrets set "AutoMapper:LicenseKey" "<key>" --project Services/Payments/Payments.Api` або змінна `AutoMapper__LicenseKey`.
+
+## Приклади запитів (curl)
+
+```bash
+BASE=http://localhost:5080
+
+# платники
+curl $BASE/api/customers
+curl $BASE/api/customers/1
+curl -X POST $BASE/api/customers -H "Content-Type: application/json" \
+  -d '{"email":"connor.obrien@example.com","fullName":"Connor O'"'"'Brien"}'
+
+# рахунки (копія довідника Білінгу)
+curl $BASE/api/invoices
+curl -X POST $BASE/api/invoices -H "Content-Type: application/json" \
+  -d '{"id":100,"number":"INV-2026-0100","merchantName":"Test Merchant","amount":500.00,"currency":"UAH"}'
+
+# створити платіж з розподілом на рахунки 3 і 5 (одна транзакція)
+curl -X POST $BASE/api/payments -H "Content-Type: application/json" \
+  -d '{"customerId":1,"currency":"UAH","method":"Card","payerAccount":"4111-XXXX-XXXX-1111",
+       "description":"Оплата","allocations":[{"invoiceId":3},{"invoiceId":5}]}'
+
+curl $BASE/api/payments/5
+curl $BASE/api/customers/1/payments?page=1&pageSize=10
+
+# життєвий цикл: Created -> Validating -> Authorized
+curl -X POST $BASE/api/payments/5/status -H "Content-Type: application/json" -d '{"newStatus":"Validating"}'
+curl -X POST $BASE/api/payments/5/authorize -H "Content-Type: application/json" -d '{"amount":755.00,"providerRef":"AUTH-1"}'
+curl -X POST $BASE/api/payments/5/status -H "Content-Type: application/json" -d '{"newStatus":"Authorized"}'
+
+# помилки
+curl -i $BASE/api/payments/999999                                            # 404 ProblemDetails
+curl -i -X POST $BASE/api/payments/2/status -H "Content-Type: application/json" -d '{"newStatus":"Settled"}'  # 409 (недопустимий перехід)
+curl -i -X POST $BASE/api/customers -H "Content-Type: application/json" -d '{"email":"bad","fullName":""}'      # 400 (DataAnnotations)
+curl -i -X DELETE $BASE/api/payments/2                                       # 204 (платіж у статусі Created)
+```
+
+> Id у прикладах (3, 5, 2) відповідають seed-даним Лаб. 01; якщо ви змінювали seed — підставте свої. Розподіл на рахунок, що вже оплачений іншим платежем, поверне 409.
+
+## Самоперевірка (Лаб. 02)
+
+- [ ] `dotnet build Platform.slnx` без помилок
+- [ ] `POST /api/customers` з прізвищем `O'Brien` — створюється без помилки SQL (параметри)
+- [ ] `POST /api/payments` з неіснуючим `invoiceId` → 404, і **жоден** платіж не збережено (відкат)
+- [ ] Повторний недопустимий перехід статусу → 409
+- [ ] Невідомий Id → 404; некоректне тіло → 400; відкат транзакції при штучному збої
+- [ ] Aspire Dashboard: `payments-api` у стані Running; Swagger відкривається

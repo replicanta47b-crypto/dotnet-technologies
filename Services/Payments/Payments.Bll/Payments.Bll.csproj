@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Payments.Dal\Payments.Dal.csproj" />
+    <ProjectReference Include="..\Payments.Domain\Payments.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoMapper" Version="15.*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.*" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.*" />
+  </ItemGroup>
+
+</Project>

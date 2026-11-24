@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- DAL: репозиторії (ADO.NET + Dapper) і Unit of Work. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Payments.Domain\Payments.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.*" />
+    <PackageReference Include="Dapper" Version="2.1.*" />
+  </ItemGroup>
+
+</Project>
