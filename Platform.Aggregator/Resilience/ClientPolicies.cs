@@ -39,7 +39,7 @@ public static class ClientPolicies
         AttemptTimeout: TimeSpan.FromSeconds(3), TotalTimeout: TimeSpan.FromSeconds(15),
         FailureRatio: 0.3, MinimumThroughput: 5, BreakDuration: TimeSpan.FromSeconds(10),
         GrpcMaxAttempts: 4, GrpcInitialBackoff: TimeSpan.FromMilliseconds(200), GrpcMaxBackoff: TimeSpan.FromSeconds(2),
-        GrpcDeadline: TimeSpan.FromSeconds(8));
+        GrpcDeadline: TimeSpan.FromSeconds(20));
 
     /// <summary>Критичний (аналог Каталогу): рахунки — основа картки платежу.</summary>
     public static readonly ClientPolicy Billing = Payments with { Name = "billing-api" };
@@ -51,7 +51,7 @@ public static class ClientPolicies
         AttemptTimeout: TimeSpan.FromSeconds(2), TotalTimeout: TimeSpan.FromSeconds(5),
         FailureRatio: 0.7, MinimumThroughput: 10, BreakDuration: TimeSpan.FromSeconds(20),
         GrpcMaxAttempts: 2, GrpcInitialBackoff: TimeSpan.FromMilliseconds(200), GrpcMaxBackoff: TimeSpan.FromSeconds(1),
-        GrpcDeadline: TimeSpan.FromSeconds(3));
+        GrpcDeadline: TimeSpan.FromSeconds(6));
 
     /// <summary>Встановлюється після Build(): колбеки breaker викликаються під час роботи, коли DI вже існує.</summary>
     public static ILogger? Logger { get; set; }
@@ -60,7 +60,7 @@ public static class ClientPolicies
     /// Налаштування Standard Resilience Handler для клієнта. Викликається ПІСЛЯ RemoveAllResilienceHandlers(),
     /// щоб власний обробник не нашаровувався на стандартний із ConfigureHttpClientDefaults.
     /// </summary>
-    /// <param name="grpc">gRPC — це завжди POST, тому HTTP-повтори вимкнено: повторами за gRPC-статусами керує ServiceConfig каналу.</param>
+    /// <param name="grpc">gRPC — це завжди POST: для нього HTTP-повтори лишаються (усі RPC — читання), а повтори за gRPC-статусами додає ServiceConfig каналу.</param>
     public static void Apply(HttpStandardResilienceOptions o, ClientPolicy p, bool grpc)
     {
         // --- Retry ---
@@ -68,7 +68,10 @@ public static class ClientPolicies
         o.Retry.Delay = p.RetryDelay;
         o.Retry.BackoffType = DelayBackoffType.Exponential;   // 200 мс, 400 мс, 800 мс...
         o.Retry.UseJitter = true;                             // розсинхронізація клієнтів (thundering herd)
-        o.Retry.DisableForUnsafeHttpMethods();                // POST/PUT/DELETE не повторюємо (дублювання змін); для gRPC — свій retry
+        // REST: POST/PUT/DELETE не повторюємо (дублювання змін). gRPC-виклики Aggregator — лише читання (ідемпотентні),
+        // хоча й передаються як POST, тож для них повтори на рівні HTTP (таймаут, обрив з'єднання, 5xx) лишаємо.
+        if (!grpc)
+            o.Retry.DisableForUnsafeHttpMethods();
 
         // --- Таймаути: загальний має вміщати повтори, SamplingDuration >= 2 × AttemptTimeout (вимога валідації) ---
         o.AttemptTimeout.Timeout = p.AttemptTimeout;

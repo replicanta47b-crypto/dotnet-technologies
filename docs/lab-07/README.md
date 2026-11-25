@@ -97,3 +97,6 @@
 4. Зупинити Redis → `GET /health/ready` у Billing і Aggregator: `Degraded` (HTTP 200), сервіси відповідають.
 5. Зупинити SQL Server → `/health/live` = 200, `/health/ready` = 503.
 6. Створити кілька платежів/рахунків → `payments.created`, `invoices.created` з розбивкою за тегами; `*.operation.duration`.
+
+### Примітка: gRPC і повтори на рівні HTTP
+У Aggregator для gRPC-клієнтів `DisableForUnsafeHttpMethods()` **не** застосовується: gRPC завжди йде як POST, але всі наші RPC — читання (ідемпотентні). Тому таймаут спроби / обрив з'єднання повторюються Polly (події `OnRetry`, `OnTimeout`, `OnCircuitOpened`), а `Unavailable`/`ResourceExhausted` додатково повторює `ServiceConfig` каналу. Для REST-клієнтів небезпечні методи, як і раніше, не повторюються.
