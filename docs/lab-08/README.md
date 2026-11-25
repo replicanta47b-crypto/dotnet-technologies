@@ -131,6 +131,29 @@
 7. **Перезапуск споживача:** зупинити `payments-api` в Dashboard → кілька разів змінити назви/суми → запустити → усі події обробляються (черга накопичувала їх).
 8. **Тимчасовий збій:** зупинити SQL Server під час обробки → у логах Payments `retry 1/3 … 2/3 … 3/3`, потім повідомлення в `payments.billing-sync.dlq`.
 
+## Результати перевірки на живому стенді
+
+Усі сценарії пройдено на запущеному AppHost (RabbitMQ 4.1, SQL Server, MongoDB, Redis):
+
+| Сценарій | Результат |
+|---|---|
+| `PUT /api/merchants/1/name` | Payments: `MerchantName` у копіях рахунків змінилась; Disputes: `merchantName` у спорах змінилась |
+| `POST /api/invoices/5/surcharges` (35,50) | Payments: `Amount` 455 → 490,50 |
+| Та сама подія двічі (однаковий `eventId`) | У логу Payments: `Duplicate … skipped: already processed`, дані не змінились |
+| Битий JSON і невідомий `type` | Обидва повідомлення в `payments.billing-sync.dlq` і `disputes.billing-sync.dlq` (по 2); у логу `Permanent failure … nack without requeue → DLQ` |
+| `payments-api` зупинений, у Billing перейменування + надбавка | У `payments.billing-sync` 2 повідомлення, 0 споживачів; після старту черга спорожніла, дані збіглися з Billing |
+| Trace перейменування | Один trace: `PUT` → `MSG rabbitmq publish` → споживач Disputes (MongoDB) одразу → споживач Payments (SQL) через 34,7 с, коли сервіс знову запустили |
+
+Зауваження: Payments шукає копії рахунків за старою назвою мерчанта (у копії немає `MerchantId`). У штатному потоці стара назва завжди збігається; штучна подія з вигаданою `oldName` нічого не оновить.
+
+### Скріншоти
+
+![Черги: DLQ по 2 повідомлення, payments.billing-sync накопичує події, поки сервіс вимкнений](01-queues-dlq-backlog.jpg)
+
+![Exchange billing-events і його bindings (invoice.* та merchant.*)](03-exchange-bindings.jpg)
+
+![Trace: HTTP PUT → публікація → споживачі Disputes і Payments](02-trace-http-publish-consume.jpg)
+
 ## Обмеження (свідомо)
 
 - **Outbox не реалізовано** (за методичкою — за бажанням). Подія публікується після `SaveChangesAsync`; якщо застосунок упаде між ними або брокер
