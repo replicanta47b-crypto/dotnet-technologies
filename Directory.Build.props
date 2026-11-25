@@ -8,6 +8,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <!-- EXTEXP0001: Retry.DisableForUnsafeHttpMethods() у Microsoft.Extensions.Http.Resilience позначено [Experimental] -->
+    <NoWarn>$(NoWarn);EXTEXP0001</NoWarn>
   </PropertyGroup>
 
 </Project>
