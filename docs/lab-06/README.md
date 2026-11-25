@@ -56,3 +56,16 @@ Gateway: `http://localhost:5000`. У Development Aggregator приймає dev-�
 4. `…/full?nocache=true&transport=http` і `&transport=grpc` → порівняти `X-Elapsed-Ms`.
 5. Зупинити `billing-api` → `200` з `warnings`.
 6. Dashboard → Metrics → `Billing.Cache` → `cache.hits` (розбивка за `cache.level`).
+
+## Знімки екрана і вимірювання
+| Файл | Що показує |
+|---|---|
+| `1a-trace-cache-miss-sql.jpg` | Перший `GET /api/billing/invoices/{id}`: промах кешу → два SQL-спани `mssql BillingDb` |
+| `1b-trace-cache-hit-no-sql.jpg` | Повторний запит: влучання в кеш, у трейсі лише `billing-api`, **без SQL-спана** (3 мс) |
+| `2-trace-aggregator-grpc.jpg` | Картка платежу через gRPC: `POST /payments.v1…`, `/billing.v1…` ×2, `/disputes.v1…` — паралельно; всередині SQL і MongoDB-спани |
+| `3-metric-cache-hits.jpg` | Метрика `cache.hits` (Meter `Billing.Cache`) в Aspire Dashboard |
+
+Результати перевірок (через Gateway `http://localhost:5000`):
+* Інвалідація: `POST …/pay` → наступний `GET` одразу повертає `Paid` (промах 16 мс), далі знову влучання (7 мс).
+* Картка платежу: `nocache` — gRPC 19–21 мс, HTTP 15–22 мс; з кешем Redis — `X-Cache: HIT`, 2 мс. На тестових даних (1 платіж, 2 рахунки) різниця транспортів в межах похибки; gRPC виграє зі збільшенням кількості викликів і розміру повідомлень.
+* Неіснуючий платіж → `404`.
