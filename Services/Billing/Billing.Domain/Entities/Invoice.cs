@@ -65,6 +65,22 @@ public class Invoice
         return line;
     }
 
+    /// <summary>
+    /// Донарахування до вже виставленого рахунку (Issued/Overdue): додає рядок і збільшує суму.
+    /// Це бізнес-факт «сума рахунку змінилась» — Білінг публікує InvoiceAmountChangedEvent.
+    /// </summary>
+    public InvoiceLine AddSurcharge(string description, decimal amount)
+    {
+        if (Status is not (InvoiceStatus.Issued or InvoiceStatus.Overdue))
+            throw new DomainException($"A surcharge can be added only to an Issued or Overdue invoice (current status: {Status})");
+
+        var line = new InvoiceLine(description, 1, amount, Lines.Count);
+        Lines.Add(line);
+        TotalAmount = Math.Round(Lines.Sum(l => l.LineTotal), 2, MidpointRounding.AwayFromZero);
+        Touch();
+        return line;
+    }
+
     public void SetDetail(string? customerRef, DateOnly? periodStart, DateOnly? periodEnd, string? note)
         => Detail = new InvoiceDetail(customerRef, periodStart, periodEnd, note);
 

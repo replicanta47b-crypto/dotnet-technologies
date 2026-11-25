@@ -54,3 +54,20 @@ public class CreateMerchantDtoValidator : AbstractValidator<CreateMerchantDto>
         RuleFor(x => x.ContactEmail).EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.ContactEmail));
     }
 }
+
+public class RenameMerchantDtoValidator : AbstractValidator<RenameMerchantDto>
+{
+    public RenameMerchantDtoValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().WithMessage("Name is required.");
+    }
+}
+
+public class AddSurchargeDtoValidator : AbstractValidator<AddSurchargeDto>
+{
+    public AddSurchargeDtoValidator()
+    {
+        RuleFor(x => x.Description).NotEmpty().WithMessage("Description is required.");
+        RuleFor(x => x.Amount).GreaterThan(0);
+    }
+}

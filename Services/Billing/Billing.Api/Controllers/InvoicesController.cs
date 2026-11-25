@@ -92,6 +92,21 @@ public class InvoicesController : ControllerBase
         return Ok(await _service.RescheduleAsync(id, input, ct));
     }
 
+    /// <summary>Донарахування до виставленого рахунку: змінює суму й публікує InvoiceAmountChangedEvent.</summary>
+    [HttpPost("{id:long}/surcharges")]
+    [ProducesResponseType<InvoiceDetailsDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<InvoiceDetailsDto>> AddSurcharge(
+        long id, AddSurchargeDto input, [FromServices] IValidator<AddSurchargeDto> validator, CancellationToken ct)
+    {
+        var validation = await validator.ValidateAsync(input, ct);
+        if (!validation.IsValid)
+            return ValidationProblem(new ValidationProblemDetails(validation.ToDictionary()));
+        return Ok(await _service.AddSurchargeAsync(id, input, ct));
+    }
+
     [HttpPost("{id:long}/categories")]
     [ProducesResponseType<InvoiceDetailsDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

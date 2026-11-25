@@ -6,6 +6,7 @@
     <ProjectReference Include="..\Disputes.Application\Disputes.Application.csproj" />
     <ProjectReference Include="..\Disputes.Infrastructure\Disputes.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\Platform.ServiceDefaults\Platform.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\..\Platform.EventBus\Platform.EventBus.csproj" />
   </ItemGroup>
 
   <ItemGroup>

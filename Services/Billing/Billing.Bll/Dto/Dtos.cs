@@ -112,6 +112,21 @@ public record AssignCategoryDto
     public bool IsPrimary { get; init; }
 }
 
+public record RenameMerchantDto
+{
+    [Required, StringLength(200)]
+    public string Name { get; init; } = "";
+}
+
+public record AddSurchargeDto
+{
+    [Required, StringLength(300)]
+    public string Description { get; init; } = "";
+
+    [Range(0.01, 1_000_000_000)]
+    public decimal Amount { get; init; }
+}
+
 public record CreateMerchantDto
 {
     [Required, StringLength(200)]

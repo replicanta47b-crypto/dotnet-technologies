@@ -1,4 +1,5 @@
 using Billing.Api.HealthChecks;
+using Billing.Api.IntegrationEvents;
 using Billing.Api.Infrastructure;
 using Billing.Api.Metrics;
 using Billing.Api.Rpc;
@@ -45,6 +46,9 @@ builder.Services.AddHealthChecks()
     .AddCheck<RedisCacheHealthCheck>("redis-cache", HealthStatus.Degraded,        // кеш необов'язковий → Degraded, а не Unhealthy
         ["cache", "redis", "ready"], TimeSpan.FromSeconds(3));
 builder.Services.AddGrpcHealthChecks();                                           // gRPC Health Checking Protocol
+
+// ---- Лаб. 08: RabbitMQ — Білінг публікує події про рахунки й мерчантів (видавець) ----
+builder.AddBillingIntegrationEvents();
 
 // ---- Лаб. 07: бізнес-метрики (Meter "Billing.Api") ----
 builder.Services.AddSingleton<BillingMetrics>();

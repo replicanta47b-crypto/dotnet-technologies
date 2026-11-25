@@ -3,6 +3,7 @@ using Disputes.Application.Common.Mappings;
 using Disputes.Infrastructure;
 using Disputes.Infrastructure.Persistence;
 using Disputes.WebApi.HealthChecks;
+using Disputes.WebApi.IntegrationEvents;
 using Disputes.WebApi.Infrastructure;
 using Disputes.WebApi.Metrics;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -34,6 +35,9 @@ builder.Services.AddAutoMapper(cfg =>
 
 // ---- Лаб. 06: gRPC-сервер (контракт Protos/disputes.proto) + interceptor (CorrelationId, логування, помилки) ----
 builder.Services.AddGrpc(o => o.Interceptors.Add<GrpcServerInterceptor>());
+
+// ---- Лаб. 08: RabbitMQ — Спори споживають події Білінгу й оновлюють merchantName (споживач) ----
+builder.AddDisputesIntegrationEvents();
 
 // ---- Лаб. 07: бізнес-метрики (Meter "Disputes.Api") ----
 builder.Services.AddSingleton<DisputeMetrics>();

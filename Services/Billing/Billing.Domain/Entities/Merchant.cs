@@ -24,6 +24,19 @@ public class Merchant
         ContactEmail = contactEmail?.Trim();
     }
 
+    /// <summary>Перейменування мерчанта. Повертає false, якщо назва не змінилась (подія тоді не потрібна).</summary>
+    public bool Rename(string newName)
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+            throw new DomainException("Merchant name is required");
+        if (newName.Trim().Length > 200)
+            throw new DomainException("Merchant name is too long (max 200)");
+        var trimmed = newName.Trim();
+        if (string.Equals(Name, trimmed, StringComparison.Ordinal)) return false;
+        Name = trimmed;
+        return true;
+    }
+
     public void Deactivate() => IsActive = false;
     public void Activate() => IsActive = true;
 }

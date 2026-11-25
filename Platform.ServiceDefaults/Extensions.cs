@@ -102,6 +102,7 @@ public static class Extensions
 
                 t.AddSource(builder.Environment.ApplicationName)   // власні spans (ActivitySource сервісу)
                     .AddSource("MongoDB.Driver")                   // spans драйвера MongoDB 3.7+ (команди й колекції)
+                    .AddSource("Platform.Messaging")               // Лаб. 08: spans публікації та обробки подій RabbitMQ (Platform.EventBus)
                     .AddAspNetCoreInstrumentation(o =>
                         // health checks не засмічують trace
                         o.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/health")

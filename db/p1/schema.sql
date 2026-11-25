@@ -158,3 +158,17 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_PT_ProviderRef' AND o
     CREATE UNIQUE INDEX UX_PT_ProviderRef ON dbo.PaymentTransactions (ProviderRef) WHERE ProviderRef IS NOT NULL;
 GO
 -- Запит: «пошук платника за поштою» покриває UNIQUE-обмеження UQ_Customers_Email (окремий індекс не потрібен)
+
+/* =====================================================================
+   Лаб. 08. ProcessedEvents — журнал оброблених інтеграційних подій (ідемпотентність споживача).
+   RabbitMQ гарантує доставку «щонайменше один раз», тож та сама подія може прийти двічі. Обробник у ТІЙ САМІЙ
+   транзакції вставляє EventId і застосовує бізнес-зміну; повторна вставка порушує PRIMARY KEY (помилка 2627)
+   → подію вже оброблено, зміни не повторюються.
+   ===================================================================== */
+IF OBJECT_ID(N'dbo.ProcessedEvents', N'U') IS NULL
+CREATE TABLE dbo.ProcessedEvents (
+    EventId     UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_ProcessedEvents PRIMARY KEY,
+    EventType   NVARCHAR(100)    NOT NULL,
+    ProcessedAt DATETIME2        NOT NULL CONSTRAINT DF_ProcessedEvents_ProcessedAt DEFAULT SYSUTCDATETIME()
+);
+GO

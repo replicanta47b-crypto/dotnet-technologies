@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Payments.Api.HealthChecks;
+using Payments.Api.IntegrationEvents;
 using Payments.Api.Infrastructure;
 using Payments.Api.Metrics;
 using Payments.Api.Rpc;
@@ -42,6 +43,9 @@ builder.Services.AddAutoMapper(cfg =>
 // ---- Лаб. 06: gRPC-сервер (контракт Protos/payments.proto) + interceptor (CorrelationId, логування, помилки) ----
 builder.Services.AddGrpc(o => o.Interceptors.Add<GrpcServerInterceptor>());
 
+// ---- Лаб. 08: RabbitMQ — Платежі споживають події Білінгу й оновлюють локальну копію Invoices (споживач) ----
+builder.AddPaymentsIntegrationEvents();
+
 // ---- Лаб. 07: бізнес-метрики (Meter "Payments.Api") — клас-singleton + фільтр, що міряє кожну дію API ----
 builder.Services.AddSingleton<PaymentMetrics>();
 
@@ -82,5 +86,8 @@ app.MapDefaultEndpoints();   // /health і /alive
 // Лаб. 05: у контейнері SQL Server база порожня — AppHost вмикає ініціалізацію (db/p1 з Лаб. 01, ідемпотентно)
 if (app.Configuration.GetValue("Database:InitializeOnStartup", false))
     await DatabaseInitializer.InitializeAsync(connectionString, Path.Combine(AppContext.BaseDirectory, "db", "p1"), app.Logger);
+
+// Лаб. 08: таблиця оброблених подій (ідемпотентність споживача) — на випадок БД, розгорнутої до цієї лаби
+await PaymentsIntegrationEvents.EnsureProcessedEventsTableAsync(connectionString, app.Logger);
 
 app.Run();

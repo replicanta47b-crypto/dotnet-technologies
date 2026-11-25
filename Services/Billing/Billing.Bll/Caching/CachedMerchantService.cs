@@ -20,4 +20,13 @@ public sealed class CachedMerchantService(IMerchantService inner, ITwoLevelCache
         await cache.RemoveAsync(CacheKeys.MerchantsAll, "merchants-all", "merchant created", ct);   // новий мерчант має з'явитися в списку
         return created;
     }
+
+    public async Task<MerchantDto> RenameAsync(long id, RenameMerchantDto input, CancellationToken ct = default)
+    {
+        var renamed = await inner.RenameAsync(id, input, ct);
+        var reason = $"merchant {id} renamed to '{renamed.Name}'";
+        await cache.RemoveAsync(CacheKeys.Merchant(id), "merchant", reason, ct);
+        await cache.RemoveAsync(CacheKeys.MerchantsAll, "merchants-all", reason, ct);
+        return renamed;
+    }
 }

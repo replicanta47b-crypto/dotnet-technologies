@@ -40,4 +40,19 @@ public class MerchantsController : ControllerBase
         var created = await _service.CreateAsync(input, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
+
+    /// <summary>Перейменування мерчанта: публікує MerchantRenamedEvent — Payments і Disputes оновлять свої копії назви.</summary>
+    [HttpPut("{id:long}/name")]
+    [ProducesResponseType<MerchantDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MerchantDto>> Rename(
+        long id, RenameMerchantDto input, [FromServices] IValidator<RenameMerchantDto> validator, CancellationToken ct)
+    {
+        var validation = await validator.ValidateAsync(input, ct);
+        if (!validation.IsValid)
+            return ValidationProblem(new ValidationProblemDetails(validation.ToDictionary()));
+        return Ok(await _service.RenameAsync(id, input, ct));
+    }
 }

@@ -1,6 +1,7 @@
 using AutoMapper;
 using Billing.Bll.Common;
 using Billing.Bll.Dto;
+using Billing.Bll.Events;
 using Billing.Dal.Interfaces;
 using Billing.Dal.Specifications;
 using Billing.Domain.Entities;
@@ -24,12 +25,14 @@ public class InvoiceService : IInvoiceService
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
     private readonly ILogger<InvoiceService> _logger;
+    private readonly IBillingEventPublisher _events;
 
-    public InvoiceService(IUnitOfWork uow, IMapper mapper, ILogger<InvoiceService> logger)
+    public InvoiceService(IUnitOfWork uow, IMapper mapper, ILogger<InvoiceService> logger, IBillingEventPublisher events)
     {
         _uow = uow;
         _mapper = mapper;
         _logger = logger;
+        _events = events;
     }
 
     public async Task<InvoiceDetailsDto> GetByIdAsync(long id, CancellationToken ct = default)
@@ -108,6 +111,9 @@ public class InvoiceService : IInvoiceService
             "Invoice {InvoiceId} {InvoiceNumber} created for merchant {MerchantId}: {Currency}, {LinesCount} line(s), due {DueDate}",
             invoice.Id, invoice.Number, invoice.MerchantId, invoice.Currency, input.Lines.Count, input.DueDate);
 
+        // подія — ЛИШЕ після успішного SaveChanges: при збої БД виняток вище, і до цього рядка виконання не доходить
+        await _events.InvoiceIssuedAsync(invoice, merchant.Name, ct);
+
         return await GetByIdAsync(invoice.Id, ct);
     }
 
@@ -119,6 +125,22 @@ public class InvoiceService : IInvoiceService
 
     public Task<InvoiceDetailsDto> RescheduleAsync(long id, RescheduleInvoiceDto input, CancellationToken ct = default)
         => MutateAsync(id, invoice => invoice.Reschedule(input.DueDate), ct);
+
+    public async Task<InvoiceDetailsDto> AddSurchargeAsync(long id, AddSurchargeDto input, CancellationToken ct = default)
+    {
+        using var activity = Telemetry.Source.StartActivity("AddInvoiceSurcharge");
+        activity?.SetTag("invoice.id", id);
+
+        var invoice = await RequireAsync(id, ct);
+        var oldAmount = invoice.TotalAmount;
+        invoice.AddSurcharge(input.Description, input.Amount);     // інваріанти — в сутності (DomainException → 409)
+        await _uow.SaveChangesAsync(ct);                            // 1) зміни збережено
+        _logger.LogInformation("Invoice {InvoiceId} surcharge {Amount} added: amount {OldAmount} -> {NewAmount} {Currency}",
+            invoice.Id, input.Amount, oldAmount, invoice.TotalAmount, invoice.Currency);
+
+        await _events.InvoiceAmountChangedAsync(invoice, invoice.Merchant.Name, oldAmount, ct);   // 2) лише тоді — подія
+        return _mapper.Map<InvoiceDetailsDto>(invoice);
+    }
 
     public async Task<InvoiceDetailsDto> AssignCategoryAsync(long id, AssignCategoryDto input, CancellationToken ct = default)
     {

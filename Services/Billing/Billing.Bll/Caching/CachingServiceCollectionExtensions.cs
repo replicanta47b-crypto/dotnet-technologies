@@ -1,3 +1,4 @@
+using Billing.Bll.Events;
 using Billing.Bll.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -25,6 +26,7 @@ public static class CachingServiceCollectionExtensions
         services.AddSingleton<ITwoLevelCache, TwoLevelCache>();
 
         // Decorator: реальний сервіс реєструємо за конкретним типом, а інтерфейс віддаємо у вигляді обгортки
+        services.AddScoped<IBillingEventPublisher, BillingEventPublisher>();   // Лаб. 08: події Білінгу
         services.AddScoped<InvoiceService>();
         services.AddScoped<MerchantService>();
         services.AddScoped<IInvoiceService>(sp => new CachedInvoiceService(

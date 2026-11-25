@@ -40,6 +40,9 @@ public sealed class CachedInvoiceService(IInvoiceService inner, ITwoLevelCache c
     public async Task<InvoiceDetailsDto> RescheduleAsync(long id, RescheduleInvoiceDto input, CancellationToken ct = default)
         => await Invalidate(await inner.RescheduleAsync(id, input, ct), ct);
 
+    public async Task<InvoiceDetailsDto> AddSurchargeAsync(long id, AddSurchargeDto input, CancellationToken ct = default)
+        => await Invalidate(await inner.AddSurchargeAsync(id, input, ct), ct);
+
     public async Task<InvoiceDetailsDto> AssignCategoryAsync(long id, AssignCategoryDto input, CancellationToken ct = default)
         => await Invalidate(await inner.AssignCategoryAsync(id, input, ct), ct);
 

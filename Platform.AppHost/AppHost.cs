@@ -20,22 +20,35 @@ var disputesDb = mongo.AddDatabase("DisputesDb");            // Лаб. 04: Mong
 var redis = builder.AddRedis("redis")
                    .WithDataVolume();                        // кеш переживає перезапуск контейнера
 
+// ---- Лаб. 08: RabbitMQ — брокер повідомлень. WithDataVolume: черги й повідомлення переживають перезапуск контейнера;
+// WithManagementPlugin: веб-інтерфейс керування (exchanges, черги, DLQ) — посилання «messaging» у Dashboard.
+// Облікові дані фіксовані (лише локальна розробка): з volume брокер запам'ятовує користувача при першому старті, а згенерований
+// Aspire випадковий пароль змінювався б між запусками → помилка автентифікації. Логін/пароль для Management UI: guest / guest. ----
+var rabbitUser = builder.AddParameter("messaging-username", "guest");
+var rabbitPassword = builder.AddParameter("messaging-password", "guest", secret: true);
+var rabbit = builder.AddRabbitMQ("messaging", rabbitUser, rabbitPassword)
+                    .WithDataVolume()
+                    .WithManagementPlugin();
+
 // Лаб. 07: WithHttpHealthCheck("/health/ready") — Dashboard показує Healthy / Degraded / Unhealthy кожного ресурсу, а WaitFor
 // чекає, поки залежність стане ЗДОРОВОЮ (readiness: БД, кеш, downstream), а не лише запуститься.
 // ---- мікросервіси: ім'я ресурсу (payments-api) = логічне ім'я для service discovery ----
 // Профіль "https": окрім http (REST через Gateway) сервіс слухає https, де за ALPN узгоджується HTTP/2 для gRPC.
 var payments = builder.AddProject<Projects.Payments_Api>("payments-api", launchProfileName: "https")
                       .WithReference(paymentsDb).WaitFor(paymentsDb)
+                      .WithReference(rabbit).WaitFor(rabbit)                       // Лаб. 08: СПОЖИВАЧ подій Білінгу (копія Invoices)
                       .WithEnvironment("Database__InitializeOnStartup", "true")    // порожня БД у контейнері → db/p1 з Лаб. 01
                       .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
 var billing = builder.AddProject<Projects.Billing_Api>("billing-api", launchProfileName: "https")
                      .WithReference(billingDb).WaitFor(billingDb)                  // міграції й seed EF Core виконує сам сервіс
                      .WithReference(redis).WaitFor(redis)                          // Лаб. 06: сервіс із кешем (L1 + L2)
+                     .WithReference(rabbit).WaitFor(rabbit)                        // Лаб. 08: ВИДАВЕЦЬ подій (invoice.*, merchant.*)
                      .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
 var disputes = builder.AddProject<Projects.Disputes_WebApi>("disputes-api", launchProfileName: "https")
                       .WithReference(disputesDb).WaitFor(disputesDb)               // індекси й seed створює сам сервіс
+                      .WithReference(rabbit).WaitFor(rabbit)                       // Лаб. 08: СПОЖИВАЧ подій Білінгу (merchantName)
                       .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
 // ---- Aggregator: паралельно опитує сервіси ----
