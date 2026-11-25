@@ -20,4 +20,3 @@ public interface IInvoiceRepository : IGenericRepository<Invoice>
 }
 
 public enum SnapshotResult { Inserted, Updated, Stale }
-}
