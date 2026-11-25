@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
 namespace Billing.Bll.Caching;
@@ -26,18 +27,21 @@ public sealed class CacheMetrics
         _invalidations = meter.CreateCounter<long>("cache.invalidations", description: "Інвалідації після змін");
     }
 
+    private static TagList Tags(string level, string name) =>
+        new() { { "cache.level", level }, { "cache.name", name } };
+
     public void Hit(string level, string name) =>
-        _hits.Add(1, new("cache.level", level), new("cache.name", name));
+        _hits.Add(1, Tags(level, name));
 
     public void Miss(string name) =>
-        _misses.Add(1, new("cache.level", "all"), new("cache.name", name));
+        _misses.Add(1, Tags("all", name));
 
     public void Eviction(string reason) =>
-        _evictions.Add(1, new("cache.level", "l1"), new("reason", reason));
+        _evictions.Add(1, new TagList { { "cache.level", "l1" }, { "reason", reason } });
 
     public void L2Error(string operation) =>
-        _errors.Add(1, new("cache.level", "l2"), new("operation", operation));
+        _errors.Add(1, new TagList { { "cache.level", "l2" }, { "operation", operation } });
 
     public void Invalidated(string name) =>
-        _invalidations.Add(1, new("cache.name", name));
+        _invalidations.Add(1, new TagList { { "cache.name", name } });
 }
