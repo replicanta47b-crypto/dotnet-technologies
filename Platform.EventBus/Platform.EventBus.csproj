@@ -7,9 +7,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Рядок підключення "messaging" передає AppHost (WithReference). Aspire.RabbitMQ.Client 9.5 прив'язаний до RabbitMQ.Client 6.x, тому підключення робимо самі (BrokerConnection) -->
+    <!-- Aspire-інтеграція: AddRabbitMQClient("messaging") реєструє IConnection (singleton), health check й рядок підключення від AppHost -->
+    <!-- Aspire.RabbitMQ.Client.v7 — той самий AddRabbitMQClient, але для RabbitMQ.Client 7.x (пакет без суфікса прив'язаний до 6.x) -->
+    <PackageReference Include="Aspire.RabbitMQ.Client.v7" Version="9.5.2" />
     <!-- RabbitMQ.Client 7.x: повністю асинхронний API (IChannel, BasicPublishAsync, BasicConsumeAsync, BasicAckAsync) -->
     <PackageReference Include="RabbitMQ.Client" Version="7.1.2" />
+    <!-- Явна версія: без неї NuGet вибирає 8.0.1 (найближча залежність) і дає NU1605 щодо 9.0.9 з AutoActivation -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.9" />
     <!-- Propagators.DefaultTextMapPropagator: W3C traceparent -->
     <PackageReference Include="OpenTelemetry.Api" Version="1.12.0" />
   </ItemGroup>

@@ -21,7 +21,7 @@ namespace Platform.EventBus;
 /// Обробка — у scope повідомлення (DI), тож обробники можуть мати Scoped-залежності (UnitOfWork, DbContext).
 /// </summary>
 public sealed class EventConsumerService(
-    BrokerConnection connection,
+    IConnection connection,
     IServiceScopeFactory scopes,
     EventConsumerOptions options,
     ILogger<EventConsumerService> logger) : BackgroundService
@@ -38,7 +38,7 @@ public sealed class EventConsumerService(
         {
             try
             {
-                _channel = await (await connection.GetAsync(stoppingToken)).CreateChannelAsync(cancellationToken: stoppingToken);
+                _channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken);
                 await Topology.DeclareQueueAsync(_channel, options.Queue, stoppingToken);
                 await _channel.BasicQosAsync(prefetchSize: 0, prefetchCount: options.Prefetch, global: false, stoppingToken);
 
