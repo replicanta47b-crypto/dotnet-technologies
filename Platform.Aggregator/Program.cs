@@ -53,10 +53,13 @@ void AddGrpcClient<TClient>(string address, ClientPolicy policy) where TClient :
     var clientBuilder = builder.Services
         .AddGrpcClient<TClient>(o => o.Address = new Uri(address))
         .ConfigureChannel(channel => channel.ServiceConfig = ClientPolicies.GrpcServiceConfig(policy))   // retry за Unavailable / ResourceExhausted
-        .AddInterceptor<GrpcClientInterceptor>()
+        .AddInterceptor<GrpcClientInterceptor>();
+    AllowDevCertificate(clientBuilder);
+
+    // спершу прибираємо стандартний обробник із ConfigureHttpClientDefaults, потім додаємо один власний
+    clientBuilder
         .RemoveAllResilienceHandlers()
         .AddStandardResilienceHandler(o => ClientPolicies.Apply(o, policy, grpc: true));
-    AllowDevCertificate(clientBuilder);
 }
 
 void AddGrpcHealthClient(string name, string address)
