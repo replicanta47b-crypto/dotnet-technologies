@@ -100,3 +100,21 @@
 
 ### Примітка: gRPC і повтори на рівні HTTP
 У Aggregator для gRPC-клієнтів `DisableForUnsafeHttpMethods()` **не** застосовується: gRPC завжди йде як POST, але всі наші RPC — читання (ідемпотентні). Тому таймаут спроби / обрив з'єднання повторюються Polly (події `OnRetry`, `OnTimeout`, `OnCircuitOpened`), а `Unavailable`/`ResourceExhausted` додатково повторює `ServiceConfig` каналу. Для REST-клієнтів небезпечні методи, як і раніше, не повторюються.
+
+## Скріншоти перевірки
+
+| Сценарій | Файл |
+|---|---|
+| Усі ресурси Running після старту (WaitFor за health) | `resources-running.jpg` |
+| Бізнес-метрика `payments.created` (Meter `Payments.Api`) у Dashboard | `business-metric-payments-created.jpg` |
+| Polly: події `OnRetry`, `OnTimeout`, `OnCircuitOpened` (`resilience.polly.strategy.events`) | `polly-events-retry-circuit.jpg` |
+| Лог `Circuit OPENED for disputes-api`, відповідь Aggregator лишається 200 (часткова) | `log-circuit-opened.jpg` |
+| Повний цикл `OPENED → HALF-OPEN → CLOSED` після відновлення disputes-api | `log-circuit-half-open-closed.jpg` |
+| Redis зупинено: `/health/ready` billing = **Degraded**, HTTP 200 (сервіс працює через БД) | `health-ready-degraded-redis-down.jpg` |
+| SQL Server зупинено: `/health/ready` payments = **Unhealthy**, HTTP 503; `/health/live` = 200 | `health-ready-unhealthy-sql-down.jpg` |
+
+![polly](polly-events-retry-circuit.jpg)
+![circuit](log-circuit-half-open-closed.jpg)
+![metric](business-metric-payments-created.jpg)
+![degraded](health-ready-degraded-redis-down.jpg)
+![unhealthy](health-ready-unhealthy-sql-down.jpg)
