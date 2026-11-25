@@ -5,11 +5,11 @@ using RabbitMQ.Client;
 namespace Platform.EventBus;
 
 /// <summary>
-/// Публікує інтеграційні події в RabbitMQ. IConnection — один на застосунок (Aspire реєструє singleton),
+/// Публікує інтеграційні події в RabbitMQ. BrokerConnection — одне з'єднання на застосунок,
 /// канал створюється на кожну публікацію й одразу закривається (IChannel не призначений для спільного використання потоками).
 /// Повідомлення persistent (переживає перезапуск брокера, якщо черга durable), MessageId = EventId, Type = ім'я події.
 /// </summary>
-public sealed class RabbitMqEventPublisher(IConnection connection, ILogger<RabbitMqEventPublisher> logger) : IEventPublisher
+public sealed class RabbitMqEventPublisher(BrokerConnection connection, ILogger<RabbitMqEventPublisher> logger) : IEventPublisher
 {
     public async Task PublishAsync<TEvent>(TEvent @event, string exchange, string routingKey, CancellationToken ct = default)
         where TEvent : IntegrationEvent
@@ -39,7 +39,7 @@ public sealed class RabbitMqEventPublisher(IConnection connection, ILogger<Rabbi
 
         try
         {
-            await using var channel = await connection.CreateChannelAsync(cancellationToken: ct);
+            await using var channel = await (await connection.GetAsync(ct)).CreateChannelAsync(cancellationToken: ct);
             await channel.BasicPublishAsync(exchange, routingKey, mandatory: false, props, body, ct);
         }
         catch (Exception ex)

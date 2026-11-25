@@ -12,12 +12,12 @@ public static class EventBusExtensions
     public const string ConnectionName = "messaging";
 
     /// <summary>
-    /// Підключення до RabbitMQ через Aspire-інтеграцію: реєструє IConnection (singleton), health check «RabbitMQ.Client»
-    /// і читає рядок підключення, який AppHost передав через WithReference. Додатково — readiness-перевірка з тегом "ready".
+    /// Підключення до RabbitMQ: реєструє BrokerConnection (спільне з'єднання, singleton), health check «messaging»
+    /// ; рядок підключення передає AppHost через WithReference. Readiness-перевірка з тегом "ready".
     /// </summary>
     public static IHostApplicationBuilder AddEventBus(this IHostApplicationBuilder builder)
     {
-        builder.AddRabbitMQClient(ConnectionName);
+        builder.Services.AddSingleton<BrokerConnection>();
         builder.Services.AddHealthChecks()
             .AddCheck<RabbitMqHealthCheck>("messaging", HealthStatus.Degraded, ["messaging", "rabbitmq", "ready"],
                 TimeSpan.FromSeconds(5));
@@ -35,7 +35,7 @@ public static class EventBusExtensions
     public static IServiceCollection AddTopologyInitializer(this IServiceCollection services, params ConsumerQueue[] queues)
     {
         services.AddHostedService(sp => new TopologyInitializer(
-            sp.GetRequiredService<IConnection>(), queues, sp.GetRequiredService<ILogger<TopologyInitializer>>()));
+            sp.GetRequiredService<BrokerConnection>(), queues, sp.GetRequiredService<ILogger<TopologyInitializer>>()));
         return services;
     }
 
@@ -50,7 +50,7 @@ public static class EventBusExtensions
             services.AddScoped(registration.HandlerType);
 
         services.AddHostedService(sp => new EventConsumerService(
-            sp.GetRequiredService<IConnection>(),
+            sp.GetRequiredService<BrokerConnection>(),
             sp.GetRequiredService<IServiceScopeFactory>(),
             options,
             sp.GetRequiredService<ILogger<EventConsumerService>>()));

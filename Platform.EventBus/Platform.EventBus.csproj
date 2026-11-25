@@ -7,10 +7,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Aspire-інтеграція: AddRabbitMQClient("messaging") реєструє IConnection (singleton), health check й рядок підключення від AppHost -->
-    <PackageReference Include="Aspire.RabbitMQ.Client" Version="9.5.0" />
+    <!-- Рядок підключення "messaging" передає AppHost (WithReference). Aspire.RabbitMQ.Client 9.5 прив'язаний до RabbitMQ.Client 6.x, тому підключення робимо самі (BrokerConnection) -->
     <!-- RabbitMQ.Client 7.x: повністю асинхронний API (IChannel, BasicPublishAsync, BasicConsumeAsync, BasicAckAsync) -->
-    <PackageReference Include="RabbitMQ.Client" Version="7.*" />
+    <PackageReference Include="RabbitMQ.Client" Version="7.1.2" />
     <!-- Propagators.DefaultTextMapPropagator: W3C traceparent -->
     <PackageReference Include="OpenTelemetry.Api" Version="1.12.0" />
   </ItemGroup>

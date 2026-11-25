@@ -9,7 +9,7 @@ namespace Platform.EventBus;
 /// опубліковані, поки споживач вимкнений, не губляться: черга вже існує й накопичує їх (сценарій «зупинили
 /// orders-api, змінили ціни, запустили знову»). Недоступність брокера не валить застосунок — лише логується.
 /// </summary>
-public sealed class TopologyInitializer(IConnection connection, IReadOnlyList<ConsumerQueue> queues,
+public sealed class TopologyInitializer(BrokerConnection connection, IReadOnlyList<ConsumerQueue> queues,
     ILogger<TopologyInitializer> logger) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -18,7 +18,7 @@ public sealed class TopologyInitializer(IConnection connection, IReadOnlyList<Co
         {
             try
             {
-                await using var channel = await connection.CreateChannelAsync(cancellationToken: cancellationToken);
+                await using var channel = await (await connection.GetAsync(cancellationToken)).CreateChannelAsync(cancellationToken: cancellationToken);
                 foreach (var q in queues)
                     await Topology.DeclareQueueAsync(channel, q, cancellationToken);
 
