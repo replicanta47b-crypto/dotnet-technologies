@@ -2,7 +2,10 @@ using Disputes.Application;
 using Disputes.Application.Common.Mappings;
 using Disputes.Infrastructure;
 using Disputes.Infrastructure.Persistence;
+using Disputes.WebApi.HealthChecks;
 using Disputes.WebApi.Infrastructure;
+using Disputes.WebApi.Metrics;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Disputes.WebApi.Rpc;
 using Disputes.WebApi.Mapping;
 using Platform.ServiceDefaults;
@@ -32,14 +35,21 @@ builder.Services.AddAutoMapper(cfg =>
 // ---- Лаб. 06: gRPC-сервер (контракт Protos/disputes.proto) + interceptor (CorrelationId, логування, помилки) ----
 builder.Services.AddGrpc(o => o.Interceptors.Add<GrpcServerInterceptor>());
 
-builder.Services.AddControllers();
+// ---- Лаб. 07: бізнес-метрики (Meter "Disputes.Api") ----
+builder.Services.AddSingleton<DisputeMetrics>();
+
+builder.Services.AddControllers(o => o.Filters.Add<DisputeMetricsFilter>());
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
 {
     ctx.ProblemDetails.Extensions["traceId"] = ctx.HttpContext.TraceIdentifier;
 });
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
-builder.Services.AddHealthChecks().AddCheck<MongoHealthCheck>("mongodb");
+// ---- Лаб. 07: health checks (теги: "database"/"mongodb" — категорія, "ready" — входить у /health/ready) ----
+builder.Services.AddHealthChecks()
+    .AddCheck<MongoPingHealthCheck>("disputes-db", HealthStatus.Unhealthy,
+        ["database", "mongodb", "ready"], TimeSpan.FromSeconds(5));
+builder.Services.AddGrpcHealthChecks();   // gRPC Health Checking Protocol
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -56,7 +66,8 @@ app.UseSwaggerUI();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapControllers();
-app.MapGrpcService<DisputesGrpcService>();   // gRPC поряд із REST (HTTP/2 за ALPN на https-endpoint)
-app.MapDefaultEndpoints();                       // /health (разом з MongoHealthCheck) і /alive
+app.MapGrpcService<DisputesGrpcService>();
+app.MapGrpcHealthChecksService();            // grpc.health.v1.Health/Check — його викликає Aggregator   // gRPC поряд із REST (HTTP/2 за ALPN на https-endpoint)
+app.MapDefaultEndpoints();                       // /health, /health/live, /health/ready (з MongoPingHealthCheck), /health/startup
 
 app.Run();

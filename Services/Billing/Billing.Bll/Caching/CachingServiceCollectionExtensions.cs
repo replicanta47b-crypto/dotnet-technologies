@@ -16,7 +16,11 @@ public static class CachingServiceCollectionExtensions
         var limit = configuration.GetSection(CacheOptions.Section).GetValue<long?>(nameof(CacheOptions.L1SizeLimit)) ?? 1024;
 
         // SizeLimit → кожен запис ОБОВ'ЯЗКОВО має Size (див. CachePolicy), інакше виняток при додаванні
-        services.AddMemoryCache(o => o.SizeLimit = limit);
+        services.AddMemoryCache(o =>
+        {
+            o.SizeLimit = limit;
+            o.TrackStatistics = true;   // GetCurrentStatistics() → gauge billing.cache.l1.entries / .size
+        });
         services.AddSingleton<CacheMetrics>();
         services.AddSingleton<ITwoLevelCache, TwoLevelCache>();
 

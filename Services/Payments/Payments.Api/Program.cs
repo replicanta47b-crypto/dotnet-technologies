@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Payments.Api.HealthChecks;
 using Payments.Api.Infrastructure;
+using Payments.Api.Metrics;
 using Payments.Api.Rpc;
 using Payments.Bll.Mapping;
 using Payments.Bll.Services;
@@ -39,7 +42,18 @@ builder.Services.AddAutoMapper(cfg =>
 // ---- Лаб. 06: gRPC-сервер (контракт Protos/payments.proto) + interceptor (CorrelationId, логування, помилки) ----
 builder.Services.AddGrpc(o => o.Interceptors.Add<GrpcServerInterceptor>());
 
-builder.Services.AddControllers();
+// ---- Лаб. 07: бізнес-метрики (Meter "Payments.Api") — клас-singleton + фільтр, що міряє кожну дію API ----
+builder.Services.AddSingleton<PaymentMetrics>();
+
+// ---- Лаб. 07: health checks. Теги: "database"/"sql" — категорія, "ready" — входить у /health/ready ----
+builder.Services.AddHealthChecks()
+    .AddCheck("payments-db", new SqlServerHealthCheck(connectionString), HealthStatus.Unhealthy,
+        ["database", "sql", "ready"], TimeSpan.FromSeconds(5));
+
+// gRPC Health Checking Protocol (grpc.health.v1.Health): стан береться з тих самих перевірок ASP.NET Core
+builder.Services.AddGrpcHealthChecks();
+
+builder.Services.AddControllers(o => o.Filters.Add<PaymentMetricsFilter>());
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
 {
     ctx.ProblemDetails.Extensions["traceId"] = ctx.HttpContext.TraceIdentifier;
@@ -61,7 +75,8 @@ app.UseSwaggerUI();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapControllers();
-app.MapGrpcService<PaymentsGrpcService>();   // gRPC поряд із REST (HTTP/2 за ALPN на https-endpoint)
+app.MapGrpcService<PaymentsGrpcService>();
+app.MapGrpcHealthChecksService();            // grpc.health.v1.Health/Check — його викликає Aggregator   // gRPC поряд із REST (HTTP/2 за ALPN на https-endpoint)
 app.MapDefaultEndpoints();   // /health і /alive
 
 // Лаб. 05: у контейнері SQL Server база порожня — AppHost вмикає ініціалізацію (db/p1 з Лаб. 01, ідемпотентно)

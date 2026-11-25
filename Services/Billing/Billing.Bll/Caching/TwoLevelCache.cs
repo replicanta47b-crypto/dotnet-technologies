@@ -139,7 +139,8 @@ public sealed class TwoLevelCache : ITwoLevelCache
     {
         _metrics.L2Error(operation);
         var failures = Interlocked.Increment(ref _l2Failures);
-        _logger.LogWarning("L2 (Redis) {Operation} failed ({Failures}/{Threshold}): {Error}",
+        // збій кешу ніколи не провалює запит: логуємо й читаємо з бази даних (graceful degradation)
+        _logger.LogWarning("Redis unavailable on {Operation} ({Failures}/{Threshold}), falling back to database: {Error}",
             operation, failures, _options.L2BreakerThreshold, ex.GetType().Name);
 
         if (failures >= _options.L2BreakerThreshold)

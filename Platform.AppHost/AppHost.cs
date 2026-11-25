@@ -20,30 +20,37 @@ var disputesDb = mongo.AddDatabase("DisputesDb");            // Лаб. 04: Mong
 var redis = builder.AddRedis("redis")
                    .WithDataVolume();                        // кеш переживає перезапуск контейнера
 
+// Лаб. 07: WithHttpHealthCheck("/health/ready") — Dashboard показує Healthy / Degraded / Unhealthy кожного ресурсу, а WaitFor
+// чекає, поки залежність стане ЗДОРОВОЮ (readiness: БД, кеш, downstream), а не лише запуститься.
 // ---- мікросервіси: ім'я ресурсу (payments-api) = логічне ім'я для service discovery ----
 // Профіль "https": окрім http (REST через Gateway) сервіс слухає https, де за ALPN узгоджується HTTP/2 для gRPC.
 var payments = builder.AddProject<Projects.Payments_Api>("payments-api", launchProfileName: "https")
                       .WithReference(paymentsDb).WaitFor(paymentsDb)
-                      .WithEnvironment("Database__InitializeOnStartup", "true");   // порожня БД у контейнері → db/p1 з Лаб. 01
+                      .WithEnvironment("Database__InitializeOnStartup", "true")    // порожня БД у контейнері → db/p1 з Лаб. 01
+                      .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
 var billing = builder.AddProject<Projects.Billing_Api>("billing-api", launchProfileName: "https")
                      .WithReference(billingDb).WaitFor(billingDb)                  // міграції й seed EF Core виконує сам сервіс
-                     .WithReference(redis).WaitFor(redis);                         // Лаб. 06: сервіс із кешем (L1 + L2)
+                     .WithReference(redis).WaitFor(redis)                          // Лаб. 06: сервіс із кешем (L1 + L2)
+                     .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
 var disputes = builder.AddProject<Projects.Disputes_WebApi>("disputes-api", launchProfileName: "https")
-                      .WithReference(disputesDb).WaitFor(disputesDb);              // індекси й seed створює сам сервіс
+                      .WithReference(disputesDb).WaitFor(disputesDb)               // індекси й seed створює сам сервіс
+                      .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
 // ---- Aggregator: паралельно опитує сервіси ----
 var aggregator = builder.AddProject<Projects.Platform_Aggregator>("aggregator")
                         .WithReference(payments).WithReference(billing).WithReference(disputes)
                         .WithReference(redis).WaitFor(redis)                       // Лаб. 06: кеш агрегованих відповідей
-                        .WaitFor(payments).WaitFor(billing).WaitFor(disputes);
+                        .WaitFor(payments).WaitFor(billing).WaitFor(disputes)      // Лаб. 07: чекає на Healthy (readiness), а не лише на запуск процесу
+                        .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
 // ---- Gateway: єдина точка входу (фіксований порт 5000) ----
 builder.AddProject<Projects.Platform_ApiGateway>("gateway")
        .WithHttpEndpoint(port: 5000, name: "public")
        .WithReference(payments).WithReference(billing).WithReference(disputes)
        .WithReference(aggregator)
-       .WaitFor(aggregator);
+       .WaitFor(aggregator)
+       .WithHttpHealthCheck("/health/ready", endpointName: "public");
 
 builder.Build().Run();

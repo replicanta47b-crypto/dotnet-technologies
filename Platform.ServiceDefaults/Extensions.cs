@@ -5,6 +5,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
+using Polly;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Serilog;
@@ -60,6 +61,9 @@ public static class Extensions
                 o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(8);
                 o.Retry.MaxRetryAttempts = 2;
                 o.Retry.Delay = TimeSpan.FromMilliseconds(300);
+                o.Retry.BackoffType = DelayBackoffType.Exponential;   // 300 мс, 600 мс, ...
+                o.Retry.UseJitter = true;                             // випадкове зміщення: клієнти не повторюють одночасно (thundering herd)
+                o.Retry.DisableForUnsafeHttpMethods();                // POST/PUT/DELETE не повторюються: повтор міг би дублювати зміни
                 o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);   // має бути >= 2 × AttemptTimeout
             });
             http.AddServiceDiscovery();                          // http://orders-api → реальна адреса від Aspire
@@ -84,7 +88,11 @@ public static class Extensions
                 .AddRuntimeInstrumentation()
                 // Лаб. 06: власні метрики кешу (cache.hits / cache.misses / cache.evictions ...) та вбудовані метрики gRPC
                 .AddMeter("Billing.Cache", "Aggregator.Cache", "Aggregator.Grpc",
-                          "Grpc.AspNetCore.Server", "Grpc.Net.Client"))
+                          "Grpc.AspNetCore.Server", "Grpc.Net.Client")
+                // Лаб. 07: метрики Polly (resilience.polly.strategy.events: OnRetry, OnCircuitOpened, ...), бізнес-метрики сервісів,
+                // метрики health checks. Назва Meter = назва сервісу.
+                .AddMeter("Polly", "Payments.Api", "Billing.Api", "Disputes.Api",
+                          "Microsoft.Extensions.Diagnostics.HealthChecks"))
             .WithTracing(t =>
             {
                 // 100 % у Development; у Production відсоток задається змінною OTEL_TRACES_SAMPLER / OTEL_TRACES_SAMPLER_ARG
@@ -108,18 +116,35 @@ public static class Extensions
         return builder;
     }
 
+    /// <summary>
+    /// Теги перевірок: "live" — процес живий (без зовнішніх залежностей, &lt; 100 мс); "ready" — готовність приймати трафік
+    /// (бази, кеш, downstream-сервіси); "startup" — завершення запуску. Сервіси додають власні перевірки з тегом "ready".
+    /// </summary>
     public static TBuilder AddDefaultHealthChecks<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
     {
         builder.Services.AddHealthChecks()
-            .AddCheck("self", () => HealthCheckResult.Healthy(), ["live"]);
+            .AddCheck("self", () => HealthCheckResult.Healthy("process is running"), ["live"])
+            .AddCheck<StartupHealthCheck>("startup", tags: ["startup"]);
         return builder;
     }
 
-    /// <summary>/health (усі перевірки) і /alive (лише «self»). У Production відкривати обережно.</summary>
+    /// <summary>
+    /// /health/live — liveness (збій → оркестратор перезапускає процес); /health/ready — readiness (збій → сервіс тимчасово
+    /// виключається з балансування, процес не перезапускається); /health/startup — чи завершено запуск;
+    /// /health — усі перевірки; /alive — сумісність з шаблоном Aspire. Відповіді — JSON із деталями кожної перевірки.
+    /// Degraded повертає HTTP 200 (сервіс працює, але без необов'язкової залежності), Unhealthy — 503.
+    /// Endpoints доступні в усіх середовищах, а не лише в Development.
+    /// </summary>
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
-        app.MapHealthChecks("/health");
-        app.MapHealthChecks("/alive", new HealthCheckOptions { Predicate = r => r.Tags.Contains("live") });
+        app.MapHealthChecks("/health", new HealthCheckOptions { ResponseWriter = HealthResponseWriter.WriteAsync });
+        app.MapHealthChecks("/health/live", Options(r => r.Tags.Contains("live")));
+        app.MapHealthChecks("/health/ready", Options(r => r.Tags.Contains("ready")));
+        app.MapHealthChecks("/health/startup", Options(r => r.Tags.Contains("startup")));
+        app.MapHealthChecks("/alive", Options(r => r.Tags.Contains("live")));
         return app;
+
+        static HealthCheckOptions Options(Func<HealthCheckRegistration, bool> predicate) =>
+            new() { Predicate = predicate, ResponseWriter = HealthResponseWriter.WriteAsync };
     }
 }

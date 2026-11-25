@@ -33,7 +33,6 @@ public static class DependencyInjection
         services.AddScoped<IDisputeRepository, DisputeRepository>();
         services.AddScoped<IDisputeThreadRepository, DisputeThreadRepository>();
         services.AddScoped<IDisputeQueries, DisputeQueries>();
-        services.AddSingleton<MongoHealthCheck>();
 
         services.AddSingleton<IDataSeeder, DisputeSeeder>();
 
