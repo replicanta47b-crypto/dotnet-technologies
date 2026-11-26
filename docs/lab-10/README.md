@@ -104,6 +104,17 @@ kubectl get secret gateway-secrets -o yaml ; # значення: [Text.Encoding]
 
 Прибирання: `.\scripts\k8s-manual.ps1 -Action down`.
 
+## Скріншоти
+
+| Файл | Що показує |
+|---|---|
+| `screenshots/01-aspirate-get-pods-services.png` | `kubectl get pods,services` після `aspirate apply`: усі 12 pod у `Running`, Service на портах 8080 |
+| `screenshots/02-manual-readiness-probe-events.png` | події `Unhealthy`: readiness probe падає (503) при недоступній БД |
+| `screenshots/04-manual-port-forward-gateway.png` | `kubectl port-forward service/gateway 8080:80` (ручний деплой) |
+| `screenshots/05-manual-cleanup-delete.png` | видалення ручних ресурсів перед запуском aspirate |
+
+Відповідь `GET /api/merchants` через Gateway (aspirate-кластер): `HTTP/1.1 200 OK`, JSON із трьома мерчантами (ЕнергоСвіт, ВодоКанал Плюс, ТелеЛінк).
+
 ## Порівняння з aspirate-output (додатково)
 
 | | Aspirate | Ручні маніфести |
