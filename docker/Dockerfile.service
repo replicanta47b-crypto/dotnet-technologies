@@ -1,0 +1,20 @@
+# Універсальний Dockerfile для образів, на які посилається aspirate-output (Лаб. 10, Ч.1).
+# Збірка з КОРЕНЯ репозиторію (приклад — див. scripts/k8s-aspirate-images.ps1):
+#   docker build -f docker/Dockerfile.service --build-arg PROJECT=Services/Billing/Billing.Api/Billing.Api.csproj \
+#                --build-arg DLL=Billing.Api.dll -t platform/billing-api:latest .
+# SDK-образ лише компілює; у фінальний aspnet-образ копіюється результат публікації.
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+ARG PROJECT
+WORKDIR /src
+COPY . .
+RUN dotnet restore "$PROJECT"
+RUN dotnet publish "$PROJECT" -c Release --no-restore -o /app/publish /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+ARG DLL
+WORKDIR /app
+COPY --from=build /app/publish .
+ENV ASPNETCORE_HTTP_PORTS=8080 DLL_NAME=$DLL
+EXPOSE 8080
+USER $APP_UID
+ENTRYPOINT ["sh", "-c", "exec dotnet $DLL_NAME"]
