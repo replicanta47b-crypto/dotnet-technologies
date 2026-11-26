@@ -53,6 +53,13 @@ builder.Services.AddIdentityServer(o =>
     })
     .AddAspNetIdentity<ApplicationUser>();
 
+// усі cookie-схеми (idsrv, idsrv.external, Identity.*): по http SameSite=None без Secure браузер відкидає
+builder.Services.PostConfigureAll<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(o =>
+{
+    if (o.Cookie.SameSite == Microsoft.AspNetCore.Http.SameSiteMode.None)
+        o.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
+});
+
 builder.Services.AddHostedService<SeedHostedService>();   // міграції + seed на старті (не під час `dotnet ef`)
 
 var app = builder.Build();
