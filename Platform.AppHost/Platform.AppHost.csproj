@@ -20,6 +20,9 @@
     <ProjectReference Include="..\Services\Payments\Payments.Api\Payments.Api.csproj" />
     <ProjectReference Include="..\Services\Billing\Billing.Api\Billing.Api.csproj" />
     <ProjectReference Include="..\Services\Disputes\Disputes.WebApi\Disputes.WebApi.csproj" />
+    <ProjectReference Include="..\Services\Auth\Auth.Api\Auth.Api.csproj" />
+    <ProjectReference Include="..\Services\Settlements\Settlements.Api\Settlements.Api.csproj" />
+    <ProjectReference Include="..\Platform.IdentityServer\Platform.IdentityServer.csproj" />
     <ProjectReference Include="..\Platform.ApiGateway\Platform.ApiGateway.csproj" />
     <ProjectReference Include="..\Platform.Aggregator\Platform.Aggregator.csproj" />
   </ItemGroup>

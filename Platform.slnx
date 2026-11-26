@@ -6,6 +6,7 @@
     <Project Path="Platform.Aggregator/Platform.Aggregator.csproj" />
     <Project Path="Platform.EventBus/Platform.EventBus.csproj" />
     <Project Path="Platform.Security/Platform.Security.csproj" />
+    <Project Path="Platform.IdentityServer/Platform.IdentityServer.csproj" />
   </Folder>
   <Folder Name="/Services/Payments/">
     <Project Path="Services/Payments/Payments.Api/Payments.Api.csproj" />
