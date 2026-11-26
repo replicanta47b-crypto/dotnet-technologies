@@ -40,7 +40,7 @@ return await Deployment.RunAsync(() =>
         name => new Kc.Role($"role-{name}", new Kc.RoleArgs { RealmId = realm.Id, Name = name, Description = $"Роль платформи: {name}" }, options));
 
     // ---- 3. Resource servers: клієнт з Authorization Services + scopes + resource + role policies + scope permissions ----
-    var resourceServers = new List<Kc.OpenId.Client>();
+    var resourceServers = new Dictionary<string, Kc.OpenId.Client>();
     foreach (var spec in PlatformModel.Servers)
     {
         var server = new Kc.OpenId.Client(spec.ClientId, new Kc.OpenId.ClientArgs
@@ -61,7 +61,7 @@ return await Deployment.RunAsync(() =>
                 KeepDefaults = false,                  // прибрати «Default Resource/Policy/Permission» (вони дозволяють усе)
             },
         }, options);
-        resourceServers.Add(server);
+        resourceServers[spec.ClientId] = server;
 
         // 3a. Authorization scopes
         var scopes = spec.Scopes.ToDictionary(
@@ -127,12 +127,12 @@ return await Deployment.RunAsync(() =>
             webOrigins: ["http://localhost:5000", "https://oauth.pstmn.io"],
             allowDirectAccessGrants: true)
         .WithDefaultScopes("profile", "email", "roles", "web-origins", "acr", "basic");
-    foreach (var audience in allAudiences) postman.WithAudience(audience);
+    foreach (var (key, server) in resourceServers) postman.WithAudience(key, server.ClientId);
 
     var aggregator = ClientFactory.CreateClientCredentials(realm, options, "aggregator-service", "Platform Aggregator (Client Credentials)")
         .WithDefaultScopes("profile", "email", "roles", "web-origins", "acr", "basic")
         .WithServiceAccountRole("user");
-    foreach (var audience in allAudiences) aggregator.WithAudience(audience);
+    foreach (var (key, server) in resourceServers) aggregator.WithAudience(key, server.ClientId);
 
     // ---- 5. Тестові користувачі: по одному на роль, ТИМЧАСОВИЙ пароль ----
     foreach (var role in PlatformModel.Roles)

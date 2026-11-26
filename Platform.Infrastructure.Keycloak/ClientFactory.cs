@@ -74,14 +74,14 @@ public static class ClientExtensions
         return c;
     }
 
-    /// <summary>Audience mapper: додає ім'я resource server (payments-api) у claim «aud» access-токена клієнта.</summary>
-    public static ManagedClient WithAudience(this ManagedClient c, string audienceClientId)
+    /// <summary>Audience mapper (audienceClientId — Output створюваного resource server: провайдер перевіряє, що такий клієнт існує, лише коли він уже створений): додає ім'я resource server (payments-api) у claim «aud» access-токена клієнта.</summary>
+    public static ManagedClient WithAudience(this ManagedClient c, string audienceKey, Input<string> audienceClientId)
     {
-        _ = new Kc.OpenId.AudienceProtocolMapper($"{c.ClientId}-aud-{audienceClientId}", new Kc.OpenId.AudienceProtocolMapperArgs
+        _ = new Kc.OpenId.AudienceProtocolMapper($"{c.ClientId}-aud-{audienceKey}", new Kc.OpenId.AudienceProtocolMapperArgs
         {
             RealmId = c.Realm.Id,
             ClientId = c.Client.Id,
-            Name = $"audience-{audienceClientId}",
+            Name = $"audience-{audienceKey}",
             IncludedClientAudience = audienceClientId,
             AddToAccessToken = true,
             AddToIdToken = false,
