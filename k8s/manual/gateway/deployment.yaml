@@ -29,10 +29,12 @@ spec:
           livenessProbe:                      # збій -> kubelet ПЕРЕЗАПУСКАЄ контейнер (процес завис)
             httpGet: { path: /health/live, port: 8080 }
             periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:                     # збій -> под ВИКЛЮЧАЄТЬСЯ з Service (без перезапуску)
             httpGet: { path: /health/ready, port: 8080 }
             periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 3
           resources:
             requests: { cpu: 100m, memory: 192Mi }

@@ -1,5 +1,16 @@
 # SQL Server для billing-api (BillingDb) і auth-api (IdentityDb); бази й міграції створюють самі сервіси.
-# emptyDir: дані зникають із подом — достатньо для лабораторної (для production — PersistentVolumeClaim).
+# PersistentVolumeClaim: дані переживають перезапуск/зупинку пода (scale 0 → 1), тож бази BillingDb/IdentityDb не зникають
+# і billing-api повертається в Ready без перезапуску. Docker Desktop має storage class за замовчуванням (hostpath).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sql-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -38,7 +49,8 @@ spec:
             - { name: data, mountPath: /var/opt/mssql }
       volumes:
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: sql-data
 ---
 apiVersion: v1
 kind: Service
