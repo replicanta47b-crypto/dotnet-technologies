@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
 if ($Action -eq 'down') {
-    kubectl delete -f k8s/manual/gateway, k8s/manual/billing-api, k8s/manual/auth-api, k8s/manual/infra --ignore-not-found
+    kubectl delete -f k8s/manual/gateway -f k8s/manual/billing-api -f k8s/manual/auth-api -f k8s/manual/infra --ignore-not-found
     kubectl delete secret sql-secrets billing-secrets auth-secrets gateway-secrets --ignore-not-found
     return
 }
