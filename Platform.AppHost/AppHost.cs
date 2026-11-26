@@ -66,39 +66,45 @@ var auth = builder.AddProject<Projects.Auth_Api>("auth-api", launchProfileName: 
                   .WithEnvironment("Auth__AuthService__SecretKey", jwtSecret)
                   .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
-// ---- Лаб. 09, Ч.2: Duende IdentityServer. ОКРЕМИЙ SQL Server (identityserver-sql) з БД IdentityServerDb — не змішується з даними сервісів.
-// MSSQL_MEMORY_LIMIT_MB: другий контейнер SQL Server на тій самій машині не має «з'їсти» всю пам'ять Docker Desktop. ----
-var identityServerSql = builder.AddSqlServer("identityserver-sql", sqlPassword)
-                               .WithDataVolume()
-                               .WithEnvironment("MSSQL_MEMORY_LIMIT_MB", "1024");
-var identityServerDb = identityServerSql.AddDatabase("IdentityServerDb");
+// ---- Лаб. 10: IdentityServer і Keycloak — лише для локального запуску (F5). Під час публікації маніфесту (aspirate generate → Kubernetes)
+// їх немає: платформа в кластері використовує Auth Service (Лаб. 09, Ч.1); Platform.Security звертається до Authority IdentityServer/Keycloak лише
+// коли приходить токен цього емітента, тож сервіси без них стартують і працюють. Окремі SQL Server/PostgreSQL для них у кластері теж не потрібні. ----
+if (!builder.ExecutionContext.IsPublishMode)
+{
+    // ---- Лаб. 09, Ч.2: Duende IdentityServer. ОКРЕМИЙ SQL Server (identityserver-sql) з БД IdentityServerDb — не змішується з даними сервісів.
+    // MSSQL_MEMORY_LIMIT_MB: другий контейнер SQL Server на тій самій машині не має «з'їсти» всю пам'ять Docker Desktop. ----
+    var identityServerSql = builder.AddSqlServer("identityserver-sql", sqlPassword)
+                                   .WithDataVolume()
+                                   .WithEnvironment("MSSQL_MEMORY_LIMIT_MB", "1024");
+    var identityServerDb = identityServerSql.AddDatabase("IdentityServerDb");
 
-// фіксований порт 5300 (http://localhost:5300 = issuer = Authority у всіх сервісів); сторінки логіну — Quickstart UI
-var identityServer = builder.AddProject<Projects.Platform_IdentityServer>("identityserver", launchProfileName: "http")
-                            .WithReference(identityServerDb).WaitFor(identityServerDb)   // міграції трьох контекстів і seed виконує сам сервіс
-                            .WithHttpHealthCheck("/health/ready", endpointName: "http");
+    // фіксований порт 5300 (http://localhost:5300 = issuer = Authority у всіх сервісів); сторінки логіну — Quickstart UI
+    var identityServer = builder.AddProject<Projects.Platform_IdentityServer>("identityserver", launchProfileName: "http")
+                                .WithReference(identityServerDb).WaitFor(identityServerDb)   // міграції трьох контекстів і seed виконує сам сервіс
+                                .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
-// ---- Лаб. 09, Ч.3: Keycloak (траєкторія А — контейнер у Aspire) з власним PostgreSQL. Realm DevRealmDrivers, resource servers, scopes, ролі,
-// клієнти й тестові користувачі створює НЕ ручне налаштування, а Pulumi-проєкт Platform.Infrastructure.Keycloak (Infrastructure as Code).
-// Пароль БД фіксований (dev): з volume Postgres запам'ятовує пароль при першому старті, а випадковий пароль Aspire змінювався б між запусками. ----
-var keycloakDbPassword = builder.AddParameter("keycloak-db-password", "keycloak-db-dev", secret: true);
-var keycloakPostgres = builder.AddPostgres("keycloak-postgres", password: keycloakDbPassword)
-                              .WithDataVolume();
-var keycloakDb = keycloakPostgres.AddDatabase("keycloakdb");
+    // ---- Лаб. 09, Ч.3: Keycloak (траєкторія А — контейнер у Aspire) з власним PostgreSQL. Realm DevRealmDrivers, resource servers, scopes, ролі,
+    // клієнти й тестові користувачі створює НЕ ручне налаштування, а Pulumi-проєкт Platform.Infrastructure.Keycloak (Infrastructure as Code).
+    // Пароль БД фіксований (dev): з volume Postgres запам'ятовує пароль при першому старті, а випадковий пароль Aspire змінювався б між запусками. ----
+    var keycloakDbPassword = builder.AddParameter("keycloak-db-password", "keycloak-db-dev", secret: true);
+    var keycloakPostgres = builder.AddPostgres("keycloak-postgres", password: keycloakDbPassword)
+                                  .WithDataVolume();
+    var keycloakDb = keycloakPostgres.AddDatabase("keycloakdb");
 
-var keycloak = builder.AddContainer("keycloak", "quay.io/keycloak/keycloak", "26.0")
-                      .WithHttpEndpoint(port: 8080, targetPort: 8080, name: "http")          // http://localhost:8080 — Admin Console і realm DevRealmDrivers
-                      .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")               // лише локальна розробка
-                      .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", "admin")
-                      .WithEnvironment("KC_DB", "postgres")
-                      .WithEnvironment("KC_DB_URL", "jdbc:postgresql://keycloak-postgres:5432/keycloakdb")
-                      .WithEnvironment("KC_DB_USERNAME", "postgres")
-                      .WithEnvironment("KC_DB_PASSWORD", keycloakDbPassword)
-                      .WithEnvironment("KC_HTTP_ENABLED", "true")
-                      .WithEnvironment("KC_HOSTNAME_STRICT", "false")
-                      .WithArgs("start-dev")                                                 // режим розробки: http, без кешу тем
-                      .WithReference(keycloakDb).WaitFor(keycloakDb)
-                      .WithHttpHealthCheck("/realms/master", endpointName: "http");
+    var keycloak = builder.AddContainer("keycloak", "quay.io/keycloak/keycloak", "26.0")
+                          .WithHttpEndpoint(port: 8080, targetPort: 8080, name: "http")          // http://localhost:8080 — Admin Console і realm DevRealmDrivers
+                          .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")               // лише локальна розробка
+                          .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", "admin")
+                          .WithEnvironment("KC_DB", "postgres")
+                          .WithEnvironment("KC_DB_URL", "jdbc:postgresql://keycloak-postgres:5432/keycloakdb")
+                          .WithEnvironment("KC_DB_USERNAME", "postgres")
+                          .WithEnvironment("KC_DB_PASSWORD", keycloakDbPassword)
+                          .WithEnvironment("KC_HTTP_ENABLED", "true")
+                          .WithEnvironment("KC_HOSTNAME_STRICT", "false")
+                          .WithArgs("start-dev")                                                 // режим розробки: http, без кешу тем
+                          .WithReference(keycloakDb).WaitFor(keycloakDb)
+                          .WithHttpHealthCheck("/realms/master", endpointName: "http");
+}
 
 var settlements = builder.AddProject<Projects.Settlements_Api>("settlements-api", launchProfileName: "https")
                          .WithEnvironment("Auth__AuthService__SecretKey", jwtSecret)
