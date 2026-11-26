@@ -1,0 +1,4668 @@
+{
+  "info": {
+    "_postman_id": "a46ed6e5-8f8a-4108-bfbe-af79d502c8fa",
+    "name": "Platform — Lab 09 (Auth Service, IdentityServer, Keycloak)",
+    "description": "Лаб. 09. Три підходи до автентифікації/авторизації платформи: власний Auth Service (ASP.NET Identity + JWT), Duende IdentityServer, Keycloak (+Pulumi). Запит іде через Gateway (http://localhost:5000). Змінні колекції: gateway, is, kc, kcPostmanSecret, kcAggregatorSecret (з `pulumi stack output ClientSecrets --show-secrets`), kcTestPassword (після першої зміни тимчасового пароля або скидання в Admin Console).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Auth Service (ASP.NET Identity + JWT)",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/auth/register"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userName\": \"student1\",\n  \"email\": \"student1@platform.local\",\n  \"password\": \"Student#12345\",\n  \"fullName\": \"Student One\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('verifyUserId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login before email verification → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/auth/login"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userNameOrEmail\": \"student1\",\n  \"password\": \"Student#12345\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403: email не підтверджено', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dev outbox (mock email) → userId + token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/auth/dev/outbox"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const mails = pm.response.json();",
+                  "const m = mails.find(x => x.to === 'student1@platform.local' && x.subject.includes('Підтвердіть'));",
+                  "if (m) { const u = new URL(m.body.split(': ').pop().trim().replace('0.0.0.0','localhost')); pm.collectionVariables.set('verifyToken', u.searchParams.get('token')); }",
+                  "pm.test('лист підтвердження знайдено', () => pm.expect(m).to.exist);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/auth/verify-email?userId={{verifyUserId}}&token={{verifyToken}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (student1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/auth/login"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userNameOrEmail\": \"student1\",\n  \"password\": \"Student#12345\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 + access token', () => { pm.response.to.have.status(200); });",
+                  "pm.collectionVariables.set('authUserToken', pm.response.json().accessToken);",
+                  "pm.collectionVariables.set('authUserId', pm.response.json().user.id);",
+                  "pm.test('refresh-токен — лише в HttpOnly cookie', () => pm.expect(pm.cookies.has('refreshToken')).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/auth/login"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userNameOrEmail\": \"admin\",\n  \"password\": \"Admin#12345\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('authAdminToken', pm.response.json().accessToken);",
+                  "pm.collectionVariables.set('authAdminId', pm.response.json().user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh token (rotation, cookie)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/auth/refresh-token"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 + новий access token', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('authUserToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /users/{id} (власник)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/users/{{authUserId}}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /users (лише Admin) — user → 403",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/users"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /users (Admin) → 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/users"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authAdminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /users/{admin} чужий профіль → 403",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/users/{{authAdminId}}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /users/{id}/refresh-tokens",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/users/{{authUserId}}/refresh-tokens"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /users/{id}/roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/users/{{authUserId}}/roles"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "POST /users/{id}/roles (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/users/{{authUserId}}/roles"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"Admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authAdminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "DELETE /users/{id}/roles/Admin (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/users/{{authUserId}}/roles/Admin"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authAdminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Without token → 401 (Gateway)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/payments/1"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Auth-token (user) → GET /api/payments/1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/payments/1"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('дозволено (не 401/403)', () => pm.expect([200,404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Auth-token (user) → /api/settlements → 403",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/settlements"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Auth-token (admin) → /api/settlements → 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/settlements"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authAdminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke token (cookie)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/auth/revoke-token"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Refresh after revoke → 401 (reuse)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/auth/refresh-token"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/auth/forgot-password"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student1@platform.local\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/auth/change-password"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Student#12345\",\n  \"newPassword\": \"Student#54321\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{authUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/auth/logout"
+            }
+          },
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "2. Duende IdentityServer",
+      "item": [
+        {
+          "name": "Authorization Code + PKCE (client postman) → GET /api/payments/1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/payments/1"
+            },
+            "auth": {
+              "type": "oauth2",
+              "oauth2": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code_with_pkce",
+                  "type": "string"
+                },
+                {
+                  "key": "authUrl",
+                  "value": "{{is}}/connect/authorize",
+                  "type": "string"
+                },
+                {
+                  "key": "accessTokenUrl",
+                  "value": "{{is}}/connect/token",
+                  "type": "string"
+                },
+                {
+                  "key": "clientId",
+                  "value": "postman",
+                  "type": "string"
+                },
+                {
+                  "key": "clientSecret",
+                  "value": "postman-dev-secret",
+                  "type": "string"
+                },
+                {
+                  "key": "scope",
+                  "value": "openid profile roles payments.read payments.create payments.update payments.delete payments.approve billing.read disputes.read settlements.read",
+                  "type": "string"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "https://oauth.pstmn.io/v1/callback",
+                  "type": "string"
+                },
+                {
+                  "key": "challengeAlgorithm",
+                  "value": "S256",
+                  "type": "string"
+                },
+                {
+                  "key": "tokenName",
+                  "value": "IdentityServer user token",
+                  "type": "string"
+                },
+                {
+                  "key": "addTokenTo",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('токен прийнято (не 401)', () => pm.expect(pm.response.code).to.not.equal(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Client Credentials (aggregator_service) → token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{is}}/connect/token"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "client_id",
+                  "value": "aggregator_service"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "aggregator-dev-secret"
+                },
+                {
+                  "key": "scope",
+                  "value": "payments.read billing.read disputes.read"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('isServiceToken', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Service token → GET /api/aggregator/payments/1/full",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/aggregator/payments/1/full"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{isServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('токен прийнято', () => pm.expect([200,404,503]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Service token (read) → POST /api/payments → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/api/payments"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{isServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403: немає scope payments.create', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Service token → /api/settlements → 403",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/settlements"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{isServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403: немає scope settlements.read', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Checkpoint: публічний клієнт swagger БЕЗ PKCE відхиляється",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{is}}/connect/authorize?client_id=swagger&response_type=code&scope=openid&redirect_uri=http://localhost:5080/swagger/oauth2-redirect.html&state=1"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const loc = pm.response.headers.get('Location') || '';",
+                  "pm.test('помилка code_challenge required', () => pm.expect(loc).to.include('error=invalid_request'));"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "Discovery document",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{is}}/.well-known/openid-configuration"
+            }
+          },
+          "event": []
+        }
+      ]
+    },
+    {
+      "name": "3. Keycloak (Pulumi)",
+      "item": [
+        {
+          "name": "Client Credentials (aggregator-service) → access token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{kc}}/protocol/openid-connect/token"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "client_id",
+                  "value": "aggregator-service"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{kcAggregatorSecret}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('kcServiceToken', pm.response.json().access_token);",
+                  "const p = JSON.parse(atob(pm.response.json().access_token.split('.')[1]));",
+                  "pm.test('Client Credentials: немає claim sub користувача-людини (service account)', () => pm.expect(p.preferred_username).to.include('service-account'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Authorization Code + PKCE (client postman) → access token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/api/payments/1"
+            },
+            "auth": {
+              "type": "oauth2",
+              "oauth2": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code_with_pkce",
+                  "type": "string"
+                },
+                {
+                  "key": "authUrl",
+                  "value": "{{kc}}/protocol/openid-connect/auth",
+                  "type": "string"
+                },
+                {
+                  "key": "accessTokenUrl",
+                  "value": "{{kc}}/protocol/openid-connect/token",
+                  "type": "string"
+                },
+                {
+                  "key": "clientId",
+                  "value": "postman",
+                  "type": "string"
+                },
+                {
+                  "key": "clientSecret",
+                  "value": "{{kcPostmanSecret}}",
+                  "type": "string"
+                },
+                {
+                  "key": "scope",
+                  "value": "openid profile",
+                  "type": "string"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "https://oauth.pstmn.io/v1/callback",
+                  "type": "string"
+                },
+                {
+                  "key": "challengeAlgorithm",
+                  "value": "S256",
+                  "type": "string"
+                },
+                {
+                  "key": "tokenName",
+                  "value": "Keycloak user token",
+                  "type": "string"
+                },
+                {
+                  "key": "addTokenTo",
+                  "value": "header",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('токен Keycloak (access, без authorization.permissions) → сервіс вимагає RPT: 403, не 401', () => pm.expect([401,403]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Роль admin (test-admin)",
+          "item": [
+            {
+              "name": "1. Token test-admin (password grant, DEV)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "password"
+                    },
+                    {
+                      "key": "client_id",
+                      "value": "postman"
+                    },
+                    {
+                      "key": "client_secret",
+                      "value": "{{kcPostmanSecret}}"
+                    },
+                    {
+                      "key": "username",
+                      "value": "test-admin"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{kcTestPassword}}"
+                    },
+                    {
+                      "key": "scope",
+                      "value": "openid"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200', () => pm.response.to.have.status(200));",
+                      "pm.collectionVariables.set('kc_admin_access', pm.response.json().access_token);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT payments-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_admin_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "payments-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_admin_payments', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_admin_payments'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT billing-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_admin_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "billing-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_admin_billing', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_admin_billing'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT disputes-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_admin_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "disputes-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_admin_disputes', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_admin_disputes'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT settlements-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_admin_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "settlements-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_admin_settlements', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_admin_settlements'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET payments/999999  [payments:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_payments')) pm.collectionVariables.set('kc_admin_payments', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments  [payments:create]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_payments')) pm.collectionVariables.set('kc_admin_payments', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:create: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments/999999/status  [payments:update]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999/status"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_payments')) pm.collectionVariables.set('kc_admin_payments', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:update: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments/999999/authorize  [payments:approve]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999/authorize"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_payments')) pm.collectionVariables.set('kc_admin_payments', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:approve: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE payments/999999  [payments:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_payments')) pm.collectionVariables.set('kc_admin_payments', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:delete: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET merchants  [billing:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/merchants"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_billing')) pm.collectionVariables.set('kc_admin_billing', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT billing/invoices/999999/due-date  [billing:update]",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999/due-date"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_billing')) pm.collectionVariables.set('kc_admin_billing', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:update: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST billing/invoices/999999/pay  [billing:publish]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999/pay"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_billing')) pm.collectionVariables.set('kc_admin_billing', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:publish: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE billing/invoices/999999  [billing:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_billing')) pm.collectionVariables.set('kc_admin_billing', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:delete: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET disputes  [disputes:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/disputes"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_disputes}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_disputes')) pm.collectionVariables.set('kc_admin_disputes', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('disputes:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE disputes/999999  [disputes:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/disputes/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_disputes}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_disputes')) pm.collectionVariables.set('kc_admin_disputes', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('disputes:delete: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET settlements  [settlements:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_settlements')) pm.collectionVariables.set('kc_admin_settlements', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST settlements/process  [settlements:process]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements/process"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_settlements')) pm.collectionVariables.set('kc_admin_settlements', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:process: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST settlements/refund  [settlements:refund]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements/refund"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_admin_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_admin_settlements')) pm.collectionVariables.set('kc_admin_settlements', pm.collectionVariables.get('kc_admin_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:refund: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Роль manager (test-manager)",
+          "item": [
+            {
+              "name": "1. Token test-manager (password grant, DEV)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "password"
+                    },
+                    {
+                      "key": "client_id",
+                      "value": "postman"
+                    },
+                    {
+                      "key": "client_secret",
+                      "value": "{{kcPostmanSecret}}"
+                    },
+                    {
+                      "key": "username",
+                      "value": "test-manager"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{kcTestPassword}}"
+                    },
+                    {
+                      "key": "scope",
+                      "value": "openid"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200', () => pm.response.to.have.status(200));",
+                      "pm.collectionVariables.set('kc_manager_access', pm.response.json().access_token);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT payments-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_manager_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "payments-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_manager_payments', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_manager_payments'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT billing-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_manager_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "billing-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_manager_billing', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_manager_billing'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT disputes-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_manager_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "disputes-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_manager_disputes', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_manager_disputes'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT settlements-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_manager_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "settlements-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_manager_settlements', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_manager_settlements'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET payments/999999  [payments:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_payments')) pm.collectionVariables.set('kc_manager_payments', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments  [payments:create]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_payments')) pm.collectionVariables.set('kc_manager_payments', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:create: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments/999999/status  [payments:update]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999/status"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_payments')) pm.collectionVariables.set('kc_manager_payments', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:update: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments/999999/authorize  [payments:approve]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999/authorize"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_payments')) pm.collectionVariables.set('kc_manager_payments', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:approve: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE payments/999999  [payments:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_payments')) pm.collectionVariables.set('kc_manager_payments', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:delete: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET merchants  [billing:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/merchants"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_billing')) pm.collectionVariables.set('kc_manager_billing', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT billing/invoices/999999/due-date  [billing:update]",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999/due-date"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_billing')) pm.collectionVariables.set('kc_manager_billing', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:update: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST billing/invoices/999999/pay  [billing:publish]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999/pay"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_billing')) pm.collectionVariables.set('kc_manager_billing', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:publish: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE billing/invoices/999999  [billing:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_billing')) pm.collectionVariables.set('kc_manager_billing', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:delete: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET disputes  [disputes:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/disputes"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_disputes}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_disputes')) pm.collectionVariables.set('kc_manager_disputes', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('disputes:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE disputes/999999  [disputes:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/disputes/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_disputes}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_disputes')) pm.collectionVariables.set('kc_manager_disputes', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('disputes:delete: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET settlements  [settlements:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_settlements')) pm.collectionVariables.set('kc_manager_settlements', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:read: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST settlements/process  [settlements:process]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements/process"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_settlements')) pm.collectionVariables.set('kc_manager_settlements', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:process: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST settlements/refund  [settlements:refund]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements/refund"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_manager_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_manager_settlements')) pm.collectionVariables.set('kc_manager_settlements', pm.collectionVariables.get('kc_manager_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:refund: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Роль user (test-user)",
+          "item": [
+            {
+              "name": "1. Token test-user (password grant, DEV)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "password"
+                    },
+                    {
+                      "key": "client_id",
+                      "value": "postman"
+                    },
+                    {
+                      "key": "client_secret",
+                      "value": "{{kcPostmanSecret}}"
+                    },
+                    {
+                      "key": "username",
+                      "value": "test-user"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{kcTestPassword}}"
+                    },
+                    {
+                      "key": "scope",
+                      "value": "openid"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200', () => pm.response.to.have.status(200));",
+                      "pm.collectionVariables.set('kc_user_access', pm.response.json().access_token);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT payments-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_user_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "payments-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_user_payments', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_user_payments'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT billing-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_user_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "billing-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_user_billing', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_user_billing'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT disputes-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_user_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "disputes-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_user_disputes', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_user_disputes'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT settlements-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_user_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "settlements-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_user_settlements', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_user_settlements'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET payments/999999  [payments:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_payments')) pm.collectionVariables.set('kc_user_payments', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments  [payments:create]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_payments')) pm.collectionVariables.set('kc_user_payments', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:create: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments/999999/status  [payments:update]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999/status"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_payments')) pm.collectionVariables.set('kc_user_payments', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:update: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments/999999/authorize  [payments:approve]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999/authorize"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_payments')) pm.collectionVariables.set('kc_user_payments', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:approve: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE payments/999999  [payments:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_payments')) pm.collectionVariables.set('kc_user_payments', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:delete: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET merchants  [billing:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/merchants"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_billing')) pm.collectionVariables.set('kc_user_billing', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT billing/invoices/999999/due-date  [billing:update]",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999/due-date"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_billing')) pm.collectionVariables.set('kc_user_billing', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:update: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST billing/invoices/999999/pay  [billing:publish]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999/pay"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_billing')) pm.collectionVariables.set('kc_user_billing', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:publish: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE billing/invoices/999999  [billing:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_billing')) pm.collectionVariables.set('kc_user_billing', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:delete: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET disputes  [disputes:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/disputes"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_disputes}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_disputes')) pm.collectionVariables.set('kc_user_disputes', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('disputes:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE disputes/999999  [disputes:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/disputes/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_disputes}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_disputes')) pm.collectionVariables.set('kc_user_disputes', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('disputes:delete: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET settlements  [settlements:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_settlements')) pm.collectionVariables.set('kc_user_settlements', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:read: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST settlements/process  [settlements:process]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements/process"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_settlements')) pm.collectionVariables.set('kc_user_settlements', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:process: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST settlements/refund  [settlements:refund]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements/refund"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_user_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_user_settlements')) pm.collectionVariables.set('kc_user_settlements', pm.collectionVariables.get('kc_user_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:refund: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Роль guest (test-guest)",
+          "item": [
+            {
+              "name": "1. Token test-guest (password grant, DEV)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "password"
+                    },
+                    {
+                      "key": "client_id",
+                      "value": "postman"
+                    },
+                    {
+                      "key": "client_secret",
+                      "value": "{{kcPostmanSecret}}"
+                    },
+                    {
+                      "key": "username",
+                      "value": "test-guest"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{kcTestPassword}}"
+                    },
+                    {
+                      "key": "scope",
+                      "value": "openid"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200', () => pm.response.to.have.status(200));",
+                      "pm.collectionVariables.set('kc_guest_access', pm.response.json().access_token);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT payments-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_guest_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "payments-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_guest_payments', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_guest_payments'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT billing-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_guest_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "billing-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_guest_billing', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_guest_billing'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT disputes-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_guest_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "disputes-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_guest_disputes', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_guest_disputes'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2. RPT settlements-api (UMA ticket)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{kc_guest_access}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{kc}}/protocol/openid-connect/token"
+                },
+                "body": {
+                  "mode": "urlencoded",
+                  "urlencoded": [
+                    {
+                      "key": "grant_type",
+                      "value": "urn:ietf:params:oauth:grant-type:uma-ticket"
+                    },
+                    {
+                      "key": "audience",
+                      "value": "settlements-api"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) { pm.collectionVariables.set('kc_guest_settlements', pm.response.json().access_token); } else { pm.collectionVariables.unset('kc_guest_settlements'); }",
+                      "pm.test('RPT: 200 (є permissions) або 403 (немає жодного)', () => pm.expect([200,403]).to.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET payments/999999  [payments:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_payments')) pm.collectionVariables.set('kc_guest_payments', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:read: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments  [payments:create]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_payments')) pm.collectionVariables.set('kc_guest_payments', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:create: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments/999999/status  [payments:update]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999/status"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_payments')) pm.collectionVariables.set('kc_guest_payments', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:update: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST payments/999999/authorize  [payments:approve]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999/authorize"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_payments')) pm.collectionVariables.set('kc_guest_payments', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:approve: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE payments/999999  [payments:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/payments/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_payments}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_payments')) pm.collectionVariables.set('kc_guest_payments', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('payments:delete: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET merchants  [billing:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/merchants"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_billing')) pm.collectionVariables.set('kc_guest_billing', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:read: дозволено (не 401/403)', () => pm.expect([401,403]).to.not.include(pm.response.code));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT billing/invoices/999999/due-date  [billing:update]",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999/due-date"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_billing')) pm.collectionVariables.set('kc_guest_billing', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:update: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST billing/invoices/999999/pay  [billing:publish]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999/pay"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_billing')) pm.collectionVariables.set('kc_guest_billing', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:publish: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE billing/invoices/999999  [billing:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/billing/invoices/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_billing}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_billing')) pm.collectionVariables.set('kc_guest_billing', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('billing:delete: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET disputes  [disputes:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/disputes"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_disputes}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_disputes')) pm.collectionVariables.set('kc_guest_disputes', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('disputes:read: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE disputes/999999  [disputes:delete]",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/disputes/999999"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_disputes}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_disputes')) pm.collectionVariables.set('kc_guest_disputes', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('disputes:delete: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET settlements  [settlements:read]",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_settlements')) pm.collectionVariables.set('kc_guest_settlements', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:read: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST settlements/process  [settlements:process]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements/process"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_settlements')) pm.collectionVariables.set('kc_guest_settlements', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:process: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST settlements/refund  [settlements:refund]",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{gateway}}/api/settlements/refund"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{kc_guest_settlements}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// роль без жодного permission на сервіс не отримує RPT (403 від Keycloak) — тоді йдемо зі звичайним access-токеном: сервіс відповість 403",
+                      "if (!pm.collectionVariables.get('kc_guest_settlements')) pm.collectionVariables.set('kc_guest_settlements', pm.collectionVariables.get('kc_guest_access'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('settlements:refund: заборонено → 403 (не 500)', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "gateway",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "is",
+      "value": "http://localhost:5300"
+    },
+    {
+      "key": "kc",
+      "value": "http://localhost:8080/realms/DevRealmDrivers"
+    },
+    {
+      "key": "kcPostmanSecret",
+      "value": ""
+    },
+    {
+      "key": "kcAggregatorSecret",
+      "value": ""
+    },
+    {
+      "key": "kcTestPassword",
+      "value": "Test#User12345"
+    }
+  ]
+}
