@@ -119,8 +119,15 @@ var aggregator = builder.AddProject<Projects.Platform_Aggregator>("aggregator")
                         .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
 // ---- Gateway: єдина точка входу (фіксований порт 5000) ----
-builder.AddProject<Projects.Platform_ApiGateway>("gateway")
-       .WithHttpEndpoint(port: 5000, name: "public")
+// Лаб. 10: у маніфесті Kubernetes порт контейнера має бути заданий явно (targetPort 8080); локально лишається фіксований 5000
+// (targetPort 8080 локально зайняв би порт Keycloak).
+var gatewayProject = builder.AddProject<Projects.Platform_ApiGateway>("gateway");
+if (builder.ExecutionContext.IsPublishMode)
+    gatewayProject.WithHttpEndpoint(targetPort: 8080, name: "public");
+else
+    gatewayProject.WithHttpEndpoint(port: 5000, name: "public");
+
+gatewayProject
        .WithReference(payments).WithReference(billing).WithReference(disputes)
        .WithReference(aggregator)
        .WithReference(auth).WithReference(settlements)                              // Лаб. 09: маршрути /auth/**, /users/**, /api/settlements/**
