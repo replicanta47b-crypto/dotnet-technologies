@@ -1,0 +1,26 @@
+resources:
+- deployment.yaml
+- service.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+- name: gateway-env
+  literals:
+    - OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES=true
+    - OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES=true
+    - OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY=in_memory
+    - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+    - HTTP_PORTS=8080
+    - services__payments-api__http__0=http://payments-api:8080
+    - services__billing-api__http__0=http://billing-api:8080
+    - services__disputes-api__http__0=http://disputes-api:8080
+    - services__aggregator__http__0=http://aggregator:8080
+    - services__auth-api__http__0=http://auth-api:8080
+    - services__settlements-api__http__0=http://settlements-api:8080
+    - Auth__AuthService__SecretKey=<redacted>
+    - OTEL_EXPORTER_OTLP_ENDPOINT=http://aspire-dashboard:18889
+    - OTEL_SERVICE_NAME=gateway
+    - ASPNETCORE_URLS=http://+:8080;
+

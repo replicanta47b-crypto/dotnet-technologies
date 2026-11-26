@@ -1,0 +1,18 @@
+resources:
+- sql
+- mongo
+- redis
+- messaging
+- payments-api
+- billing-api
+- disputes-api
+- auth-api
+- settlements-api
+- aggregator
+- gateway
+- dashboard.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+

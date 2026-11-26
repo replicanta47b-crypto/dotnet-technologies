@@ -1,0 +1,35 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-api
+  labels:
+    app: billing-api
+spec:
+  minReadySeconds: 60
+  replicas: 1
+  selector:
+    matchLabels:
+      app: billing-api
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: billing-api
+    spec:
+      containers:
+      - name: billing-api
+        image: docker.io/platform/billing-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: https
+          containerPort: 8443
+        envFrom:
+        - configMapRef:
+            name: billing-api-env
+        - secretRef:
+            name: billing-api-secrets
+      terminationGracePeriodSeconds: 180
