@@ -35,6 +35,22 @@ Aspirate шифрує секрети й просить пароль (його п
 
 Якщо aspirate під час `generate` намагається запушити образи у віддалений реєстр, використайте `aspirate generate --image-pull-policy IfNotPresent` та реєстр-заглушку (образи залишаються в локальному Docker Desktop).
 
+## Фактичний хід Частини 1 (нюанси, які виявились)
+
+1. `aspirate init` створює `Platform.AppHost/aspirate.json`; стан і секрети — в `aspirate-state.json` (не комітиться, у `.gitignore`).
+2. Власний виклик AppHost з боку aspirate у нашому середовищі завершувався помилкою, тому маніфест згенеровано напряму:
+   `dotnet run --project . -- --publisher manifest --output-path aspire-manifest.json`, далі
+   `aspirate generate --skip-build --image-pull-policy IfNotPresent -m aspire-manifest.json`.
+3. Образи зібрано через `docker/Dockerfile.service` (скрипт `scripts/k8s-aspirate-images.ps1`), бо `dotnet publish /t:PublishContainer` образів не створив. Теги `platform/<service>:latest`, `imagePullPolicy: IfNotPresent`.
+4. У publish-режимі блок IdentityServer/Keycloak вимкнено (`IsPublishMode`), для gateway задано `targetPort: 8080`.
+5. Aspirate **не генерує liveness/readiness probes** і створює Service на порту **8080** (не 80), на відміну від ручних маніфестів.
+6. Payments API у Kubernetes сам створює БД `PaymentsDb` (`EnsureDatabaseExistsAsync`): локально БД створює Aspire, у кластері цього ніхто не робить.
+7. Kubelet кешує образ `latest`; після перебудови використовуйте унікальний тег + `kubectl set image` (або `rollout restart`, якщо образ нового тегу).
+8. Service discovery: у Gateway адреси кластерів `http://auth-api` без порту, а Service від aspirate слухає 8080 → 504 (ConnectTimeout). Виправлення після `aspirate apply`:
+   `kubectl set env deploy/gateway ReverseProxy__Clusters__<cluster>__Destinations__d1__Address=http://<service>:8080` для кластерів auth, payments, billing, disputes, settlements, aggregator.
+9. Результат: усі 12 pod у `Running`; `POST /auth/login` і `GET /api/merchants` через `kubectl port-forward service/gateway 8081:8080` повертають 200.
+10. Секрети: у `aspirate-output` паролі Mongo/Redis та ключ JWT замінено на `<redacted>` перед комітом; `aspirate-state.json` не комітиться.
+
 ## Частина 2–3. Ручний деплой
 
 Файли:
