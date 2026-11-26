@@ -11,8 +11,10 @@ $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
 Write-Host '== dotnet-ef tool ==' -ForegroundColor Cyan
-dotnet tool update --global dotnet-ef 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) { dotnet tool install --global dotnet-ef }
+# dotnet-ef MUST be 9.x: version 10 needs the .NET 10 runtime, the platform targets .NET 9
+dotnet tool uninstall --global dotnet-ef 2>&1 | Out-Null
+dotnet tool install --global dotnet-ef --version "9.*"
+if ($LASTEXITCODE -ne 0) { throw 'dotnet-ef 9.x was not installed' }
 
 function Add-Migration($project, $context, $name, $outDir) {
     $dir = Join-Path $project $outDir
