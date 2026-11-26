@@ -3,6 +3,7 @@ using Platform.Security;
 using Platform.ServiceDefaults;
 using Yarp.ReverseProxy.Forwarder;
 using Yarp.ReverseProxy.Model;
+using Yarp.ReverseProxy.Transforms;
 
 var builder = WebApplication.CreateBuilder(args);
 
