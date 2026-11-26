@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Лаб. 09, Частина 3: Infrastructure as Code для Keycloak на Pulumi (C#, провайдер Pulumi.Keycloak).
+       Окремий проєкт: НЕ входить у Platform.slnx і не збирається разом із платформою (власний цикл: pulumi up). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DevRealmDrivers.Iac</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Pulumi" Version="3.*" />
+    <PackageReference Include="Pulumi.Keycloak" Version="6.*" />
+  </ItemGroup>
+
+</Project>

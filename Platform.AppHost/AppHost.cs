@@ -78,6 +78,28 @@ var identityServer = builder.AddProject<Projects.Platform_IdentityServer>("ident
                             .WithReference(identityServerDb).WaitFor(identityServerDb)   // міграції трьох контекстів і seed виконує сам сервіс
                             .WithHttpHealthCheck("/health/ready", endpointName: "http");
 
+// ---- Лаб. 09, Ч.3: Keycloak (траєкторія А — контейнер у Aspire) з власним PostgreSQL. Realm DevRealmDrivers, resource servers, scopes, ролі,
+// клієнти й тестові користувачі створює НЕ ручне налаштування, а Pulumi-проєкт Platform.Infrastructure.Keycloak (Infrastructure as Code).
+// Пароль БД фіксований (dev): з volume Postgres запам'ятовує пароль при першому старті, а випадковий пароль Aspire змінювався б між запусками. ----
+var keycloakDbPassword = builder.AddParameter("keycloak-db-password", "keycloak-db-dev", secret: true);
+var keycloakPostgres = builder.AddPostgres("keycloak-postgres", password: keycloakDbPassword)
+                              .WithDataVolume();
+var keycloakDb = keycloakPostgres.AddDatabase("keycloakdb");
+
+var keycloak = builder.AddContainer("keycloak", "quay.io/keycloak/keycloak", "26.0")
+                      .WithHttpEndpoint(port: 8080, targetPort: 8080, name: "http")          // http://localhost:8080 — Admin Console і realm DevRealmDrivers
+                      .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")               // лише локальна розробка
+                      .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", "admin")
+                      .WithEnvironment("KC_DB", "postgres")
+                      .WithEnvironment("KC_DB_URL", "jdbc:postgresql://keycloak-postgres:5432/keycloakdb")
+                      .WithEnvironment("KC_DB_USERNAME", "postgres")
+                      .WithEnvironment("KC_DB_PASSWORD", keycloakDbPassword)
+                      .WithEnvironment("KC_HTTP_ENABLED", "true")
+                      .WithEnvironment("KC_HOSTNAME_STRICT", "false")
+                      .WithArgs("start-dev")                                                 // режим розробки: http, без кешу тем
+                      .WithReference(keycloakDb).WaitFor(keycloakDb)
+                      .WithHttpHealthCheck("/realms/master", endpointName: "http");
+
 var settlements = builder.AddProject<Projects.Settlements_Api>("settlements-api", launchProfileName: "https")
                          .WithEnvironment("Auth__AuthService__SecretKey", jwtSecret)
                          .WithHttpHealthCheck("/health/ready", endpointName: "http");

@@ -1,0 +1,3 @@
+name: platform-infrastructure-keycloak
+runtime: dotnet
+description: Keycloak realm DevRealmDrivers для платформи платежів (Лаб. 09, Частина 3) — realm, resource servers, scopes, ролі, permissions, клієнти, тестові користувачі
