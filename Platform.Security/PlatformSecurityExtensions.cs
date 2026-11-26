@@ -33,7 +33,6 @@ public static class PlatformSecurityExtensions
         builder.Services.AddOptions<PlatformAuthOptions>().Bind(builder.Configuration.GetSection(PlatformAuthOptions.Section));
 
         var validateAudience = service is not null;
-        var isDevelopment = builder.Environment.IsDevelopment();
 
         builder.Services.AddAuthentication(o =>
             {
@@ -65,7 +64,7 @@ public static class PlatformSecurityExtensions
             .AddJwtBearer(IdentityServerScheme, o =>
             {
                 o.Authority = options.IdentityServer.Authority;
-                o.RequireHttpsMetadata = !isDevelopment;
+                o.RequireHttpsMetadata = !IsLoopback(o.Authority);   // http дозволено лише для localhost (локальна розробка); будь-який інший Authority — тільки HTTPS
                 o.MapInboundClaims = false;
                 o.TokenValidationParameters = new TokenValidationParameters
                 {
@@ -80,7 +79,7 @@ public static class PlatformSecurityExtensions
             .AddJwtBearer(KeycloakScheme, o =>
             {
                 o.Authority = options.Keycloak.Authority;
-                o.RequireHttpsMetadata = !isDevelopment;
+                o.RequireHttpsMetadata = !IsLoopback(o.Authority);   // http дозволено лише для localhost (локальна розробка); будь-який інший Authority — тільки HTTPS
                 o.MapInboundClaims = false;
                 o.TokenValidationParameters = new TokenValidationParameters
                 {
@@ -118,6 +117,9 @@ public static class PlatformSecurityExtensions
         app.UseAuthorization();
         return app;
     }
+
+    private static bool IsLoopback(string? authority) =>
+        Uri.TryCreate(authority, UriKind.Absolute, out var uri) && uri.IsLoopback;
 
     private static string SelectScheme(HttpContext context, PlatformAuthOptions options)
     {

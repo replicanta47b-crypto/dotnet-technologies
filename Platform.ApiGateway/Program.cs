@@ -41,7 +41,7 @@ app.Use(async (context, next) =>
     await next();
     stopwatch.Stop();
 
-    var proxy = context.GetReverseProxyFeature();
+    var proxy = context.Features.Get<Yarp.ReverseProxy.Model.IReverseProxyFeature>();   // null, якщо запит не дійшов до проксі (401, 404)
     var route = proxy?.Route.Config.RouteId;
     var cluster = proxy?.Cluster.Config.ClusterId;
 
