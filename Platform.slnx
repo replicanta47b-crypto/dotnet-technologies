@@ -5,6 +5,7 @@
     <Project Path="Platform.ApiGateway/Platform.ApiGateway.csproj" />
     <Project Path="Platform.Aggregator/Platform.Aggregator.csproj" />
     <Project Path="Platform.EventBus/Platform.EventBus.csproj" />
+    <Project Path="Platform.Security/Platform.Security.csproj" />
   </Folder>
   <Folder Name="/Services/Payments/">
     <Project Path="Services/Payments/Payments.Api/Payments.Api.csproj" />
@@ -24,5 +25,11 @@
     <Project Path="Services/Disputes/Disputes.Infrastructure/Disputes.Infrastructure.csproj" />
     <Project Path="Services/Disputes/Disputes.Domain/Disputes.Domain.csproj" />
     <Project Path="Services/Disputes/Disputes.Domain.Tests/Disputes.Domain.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Services/Auth/">
+    <Project Path="Services/Auth/Auth.Api/Auth.Api.csproj" />
+  </Folder>
+  <Folder Name="/Services/Settlements/">
+    <Project Path="Services/Settlements/Settlements.Api/Settlements.Api.csproj" />
   </Folder>
 </Solution>

@@ -2,12 +2,14 @@ using System.Globalization;
 using Disputes.Application.Dtos;
 using Disputes.Application.Queries.GetDisputesList;
 using Grpc.Core;
+using Platform.Security;
 using MediatR;
 using Platform.Contracts.Disputes;
 
 namespace Disputes.WebApi.Rpc;
 
 /// <summary>gRPC-фасад над тим самим MediatR-запитом (CQRS), що використовує й REST-контролер.</summary>
+[RequirePermission(PlatformPermissions.Disputes.Read)]   // Лаб. 09: Aggregator викликає зі scope disputes.read (Client Credentials)
 public sealed class DisputesGrpcService(ISender mediator) : DisputesService.DisputesServiceBase
 {
     public override async Task<DisputesReply> GetDisputesByPayment(GetDisputesByPaymentRequest request, ServerCallContext context)

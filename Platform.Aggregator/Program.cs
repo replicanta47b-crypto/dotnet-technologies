@@ -6,6 +6,8 @@ using Microsoft.Extensions.Http.Resilience;
 using Platform.Aggregator.Clients;
 using Platform.Aggregator.HealthChecks;
 using Platform.Aggregator.Resilience;
+using Platform.Aggregator.Security;
+using Platform.Security;
 using Platform.Aggregator.Services;
 using Platform.Contracts.Billing;
 using Platform.Contracts.Disputes;
@@ -17,6 +19,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();   // Serilog, OpenTelemetry, CorrelationIdHandler для всіх HttpClient, service discovery, resilience
 
+// ---- Лаб. 09: вхід — JWT (будь-який емітент платформи), усі endpoints агрегатора лише для автентифікованих;
+//      вихід — Client Credentials: Aggregator звертається до мікросервісів від власного імені (клієнт aggregator_service) ----
+builder.AddPlatformAuthentication(service: null);
+builder.Services.Configure<AggregatorClientOptions>(builder.Configuration.GetSection(AggregatorClientOptions.Section));
+builder.Services.AddHttpClient<ClientCredentialsTokenProvider>();
+builder.Services.AddTransient<BearerTokenHandler>();
+
 // ---- Resilience (Лаб. 07). ServiceDefaults через ConfigureHttpClientDefaults вже додає Standard Resilience Handler
 //      до КОЖНОГО клієнта. Для клієнтів із власними вимогами спершу RemoveAllResilienceHandlers(), потім один власний
 //      AddStandardResilienceHandler — інакше обробники нашаровувались би. Значення — у Resilience/ClientPolicies.cs.
@@ -25,12 +34,15 @@ builder.AddServiceDefaults();   // Serilog, OpenTelemetry, CorrelationIdHandler 
 // ---- REST-шлях (Лаб. 05): typed HttpClients. "http://" — явно HTTP/1.1-endpoint сервісу ("https+http" обрав би https,
 //      який тепер потрібен лише для gRPC); ім'я — ресурс з AppHost (service discovery) ----
 builder.Services.AddHttpClient<PaymentsClient>(c => c.BaseAddress = new("http://payments-api"))
+    .AddHttpMessageHandler<BearerTokenHandler>()
     .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o => ClientPolicies.Apply(o, ClientPolicies.Payments, grpc: false));
 builder.Services.AddHttpClient<BillingClient>(c => c.BaseAddress = new("http://billing-api"))
+    .AddHttpMessageHandler<BearerTokenHandler>()
     .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o => ClientPolicies.Apply(o, ClientPolicies.Billing, grpc: false));
 builder.Services.AddHttpClient<DisputesClient>(c => c.BaseAddress = new("http://disputes-api"))
+    .AddHttpMessageHandler<BearerTokenHandler>()
     .RemoveAllResilienceHandlers()
     .AddStandardResilienceHandler(o => ClientPolicies.Apply(o, ClientPolicies.Disputes, grpc: false));
 
@@ -53,7 +65,8 @@ void AddGrpcClient<TClient>(string address, ClientPolicy policy) where TClient :
     var clientBuilder = builder.Services
         .AddGrpcClient<TClient>(o => o.Address = new Uri(address))
         .ConfigureChannel(channel => channel.ServiceConfig = ClientPolicies.GrpcServiceConfig(policy))   // retry за Unavailable / ResourceExhausted
-        .AddInterceptor<GrpcClientInterceptor>();
+        .AddInterceptor<GrpcClientInterceptor>()
+        .AddHttpMessageHandler<BearerTokenHandler>();   // Лаб. 09: service-токен у кожному gRPC-виклику
     AllowDevCertificate(clientBuilder);
 
     // спершу прибираємо стандартний обробник із ConfigureHttpClientDefaults, потім додаємо один власний
@@ -125,6 +138,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
+app.UsePlatformAuthorization();
 app.MapControllers();
 app.MapDefaultEndpoints();   // /health, /health/live, /health/ready, /health/startup
 

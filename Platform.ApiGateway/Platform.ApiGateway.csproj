@@ -4,6 +4,7 @@
        сервісів (service discovery Aspire). Порт 5000 задає AppHost, тому launchSettings.json тут немає. -->
   <ItemGroup>
     <ProjectReference Include="..\Platform.ServiceDefaults\Platform.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\Platform.Security\Platform.Security.csproj" />
   </ItemGroup>
 
   <ItemGroup>

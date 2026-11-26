@@ -1,5 +1,6 @@
 using System.Globalization;
 using Grpc.Core;
+using Platform.Security;
 using Payments.Bll.Services;
 using Payments.Domain.Exceptions;
 using Platform.Contracts.Payments;
@@ -7,6 +8,7 @@ using Platform.Contracts.Payments;
 namespace Payments.Api.Rpc;
 
 /// <summary>gRPC-фасад над IPaymentService (той самий BLL, що й у REST). Помилки домену мапляться на StatusCode.</summary>
+[RequirePermission(PlatformPermissions.Payments.Read)]   // Лаб. 09: Aggregator викликає зі scope payments.read (Client Credentials)
 public sealed class PaymentsGrpcService(IPaymentService payments) : PaymentsService.PaymentsServiceBase
 {
     public override async Task<PaymentReply> GetPayment(GetPaymentRequest request, ServerCallContext context)

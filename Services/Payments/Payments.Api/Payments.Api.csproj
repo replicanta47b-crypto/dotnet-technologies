@@ -7,6 +7,7 @@
     <ProjectReference Include="..\Payments.Domain\Payments.Domain.csproj" />
     <ProjectReference Include="..\..\..\Platform.ServiceDefaults\Platform.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\..\Platform.EventBus\Platform.EventBus.csproj" />
+    <ProjectReference Include="..\..\..\Platform.Security\Platform.Security.csproj" />
   </ItemGroup>
 
   <!-- скрипти бази з Лаб. 01 — поруч зі збіркою, для DatabaseInitializer (запуск у контейнері) -->

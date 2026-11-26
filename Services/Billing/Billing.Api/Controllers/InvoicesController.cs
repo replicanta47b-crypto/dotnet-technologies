@@ -1,3 +1,4 @@
+using Platform.Security;
 using Billing.Bll.Dto;
 using Billing.Bll.Services;
 using Billing.Bll.Validation;
@@ -17,6 +18,7 @@ public class InvoicesController : ControllerBase
     public InvoicesController(IInvoiceService service) => _service = service;
 
     /// <summary>Список рахунків: пагінація, фільтри (search, status, merchantId, minAmount, maxAmount), сортування (sortBy=number|amount|dueDate, sortDir).</summary>
+    [RequirePermission(PlatformPermissions.Billing.Read)]
     [HttpGet]
     [ProducesResponseType<PagedResult<InvoiceDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -30,24 +32,28 @@ public class InvoicesController : ControllerBase
     }
 
     /// <summary>Прострочені рахунки (інша специфікація — той самий репозиторій).</summary>
+    [RequirePermission(PlatformPermissions.Billing.Read)]
     [HttpGet("overdue")]
     [ProducesResponseType<IReadOnlyList<InvoiceDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<InvoiceDto>>> GetOverdue(CancellationToken ct)
         => Ok(await _service.GetOverdueAsync(ct));
 
     /// <summary>Рахунки категорії, призначені після дати since (за замовчуванням — останні 30 днів). M:N через проміжну сутність.</summary>
+    [RequirePermission(PlatformPermissions.Billing.Read)]
     [HttpGet("~/api/categories/{slug}/invoices")]
     [ProducesResponseType<IReadOnlyList<InvoiceDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<InvoiceDto>>> GetByCategory(
         string slug, [FromQuery] DateTime? since, CancellationToken ct)
         => Ok(await _service.GetByCategoryAsync(slug, since, ct));
 
+    [RequirePermission(PlatformPermissions.Billing.Read)]
     [HttpGet("{id:long}")]
     [ProducesResponseType<InvoiceDetailsDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<InvoiceDetailsDto>> GetById(long id, CancellationToken ct)
         => Ok(await _service.GetByIdAsync(id, ct));
 
+    [RequirePermission(PlatformPermissions.Billing.Create)]
     [HttpPost]
     [ProducesResponseType<InvoiceDetailsDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -64,6 +70,7 @@ public class InvoicesController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);   // 201 + Location
     }
 
+    [RequirePermission(PlatformPermissions.Billing.Publish)]
     [HttpPost("{id:long}/pay")]
     [ProducesResponseType<InvoiceDetailsDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -71,6 +78,7 @@ public class InvoicesController : ControllerBase
     public async Task<ActionResult<InvoiceDetailsDto>> MarkPaid(long id, CancellationToken ct)
         => Ok(await _service.MarkPaidAsync(id, ct));
 
+    [RequirePermission(PlatformPermissions.Billing.Publish)]
     [HttpPost("{id:long}/void")]
     [ProducesResponseType<InvoiceDetailsDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -78,6 +86,7 @@ public class InvoicesController : ControllerBase
     public async Task<ActionResult<InvoiceDetailsDto>> Void(long id, CancellationToken ct)
         => Ok(await _service.VoidAsync(id, ct));
 
+    [RequirePermission(PlatformPermissions.Billing.Update)]
     [HttpPut("{id:long}/due-date")]
     [ProducesResponseType<InvoiceDetailsDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -93,6 +102,7 @@ public class InvoicesController : ControllerBase
     }
 
     /// <summary>Донарахування до виставленого рахунку: змінює суму й публікує InvoiceAmountChangedEvent.</summary>
+    [RequirePermission(PlatformPermissions.Billing.Update)]
     [HttpPost("{id:long}/surcharges")]
     [ProducesResponseType<InvoiceDetailsDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -107,6 +117,7 @@ public class InvoicesController : ControllerBase
         return Ok(await _service.AddSurchargeAsync(id, input, ct));
     }
 
+    [RequirePermission(PlatformPermissions.Billing.Update)]
     [HttpPost("{id:long}/categories")]
     [ProducesResponseType<InvoiceDetailsDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -122,6 +133,7 @@ public class InvoicesController : ControllerBase
     }
 
     /// <summary>М'яке видалення (лише Draft/Void).</summary>
+    [RequirePermission(PlatformPermissions.Billing.Delete)]
     [HttpDelete("{id:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

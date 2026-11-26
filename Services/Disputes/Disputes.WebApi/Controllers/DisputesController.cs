@@ -1,3 +1,4 @@
+using Platform.Security;
 using AutoMapper;
 using Disputes.Application.Commands.AddComment;
 using Disputes.Application.Commands.CreateDispute;
@@ -18,6 +19,7 @@ namespace Disputes.WebApi.Controllers;
 public class DisputesController(ISender mediator, IMapper mapper) : ApiControllerBase(mediator)
 {
     /// <summary>Список спорів: фільтри, повнотекстовий пошук, сортування й пагінація виконуються в MongoDB.</summary>
+    [RequirePermission(PlatformPermissions.Disputes.Read)]
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<DisputeDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -35,6 +37,7 @@ public class DisputesController(ISender mediator, IMapper mapper) : ApiControlle
             new GetDisputesListQuery(merchantId, paymentId, status, search, sortBy, desc, page, pageSize), ct));
 
     /// <summary>Спір за Id. У заголовку ETag — версія документа (для If-Match у PUT).</summary>
+    [RequirePermission(PlatformPermissions.Disputes.Read)]
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(DisputeDetailsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -47,6 +50,7 @@ public class DisputesController(ISender mediator, IMapper mapper) : ApiControlle
     }
 
     /// <summary>Відкриття спору. 201 + Location із рядковим ObjectId.</summary>
+    [RequirePermission(PlatformPermissions.Disputes.Create)]
     [HttpPost]
     [ProducesResponseType(typeof(string), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -58,6 +62,7 @@ public class DisputesController(ISender mediator, IMapper mapper) : ApiControlle
     }
 
     /// <summary>Зміна статусу спору. Заголовок If-Match: "версія" вмикає оптимістичну конкурентність.</summary>
+    [RequirePermission(PlatformPermissions.Disputes.Update)]
     [HttpPut("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -71,6 +76,7 @@ public class DisputesController(ISender mediator, IMapper mapper) : ApiControlle
     }
 
     /// <summary>Додає коментар до спору й повертає оновлений спір.</summary>
+    [RequirePermission(PlatformPermissions.Disputes.Create)]
     [HttpPost("{id}/comments")]
     [ProducesResponseType(typeof(DisputeDetailsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -84,6 +90,7 @@ public class DisputesController(ISender mediator, IMapper mapper) : ApiControlle
     }
 
     /// <summary>Видалення спору (разом із темою обговорення).</summary>
+    [RequirePermission(PlatformPermissions.Disputes.Delete)]
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

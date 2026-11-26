@@ -3,6 +3,7 @@ using Billing.Bll.Dto;
 using Billing.Bll.Services;
 using Billing.Domain.Exceptions;
 using Grpc.Core;
+using Platform.Security;
 using Platform.Contracts.Billing;
 
 namespace Billing.Api.Rpc;
@@ -11,6 +12,7 @@ namespace Billing.Api.Rpc;
 /// gRPC-фасад над тим самим IInvoiceService, що й REST-контролер. Отже gRPC-виклики теж проходять через
 /// дворівневий кеш (L1 → L2 → БД). Логіка тут відсутня: лише валідація аргументів, мапінг DTO ↔ proto і помилок ↔ StatusCode.
 /// </summary>
+[RequirePermission(PlatformPermissions.Billing.Read)]   // Лаб. 09: Aggregator викликає зі scope billing.read (Client Credentials)
 public sealed class BillingGrpcService(IInvoiceService invoices, ILogger<BillingGrpcService> logger)
     : BillingService.BillingServiceBase
 {

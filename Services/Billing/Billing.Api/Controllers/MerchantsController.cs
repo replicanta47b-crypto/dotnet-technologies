@@ -1,3 +1,4 @@
+using Platform.Security;
 using Billing.Bll.Dto;
 using Billing.Bll.Services;
 using FluentValidation;
@@ -14,18 +15,21 @@ public class MerchantsController : ControllerBase
 
     public MerchantsController(IMerchantService service) => _service = service;
 
+    [RequirePermission(PlatformPermissions.Billing.Read)]
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<MerchantDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<MerchantDto>>> GetAll(CancellationToken ct)
         => Ok(await _service.GetAllAsync(ct));
 
     /// <summary>Мерчант з рахунками (Explicit Loading).</summary>
+    [RequirePermission(PlatformPermissions.Billing.Read)]
     [HttpGet("{id:long}")]
     [ProducesResponseType<MerchantDetailsDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<MerchantDetailsDto>> GetById(long id, CancellationToken ct)
         => Ok(await _service.GetByIdAsync(id, ct));
 
+    [RequirePermission(PlatformPermissions.Billing.Create)]
     [HttpPost]
     [ProducesResponseType<MerchantDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -42,6 +46,7 @@ public class MerchantsController : ControllerBase
     }
 
     /// <summary>Перейменування мерчанта: публікує MerchantRenamedEvent — Payments і Disputes оновлять свої копії назви.</summary>
+    [RequirePermission(PlatformPermissions.Billing.Update)]
     [HttpPut("{id:long}/name")]
     [ProducesResponseType<MerchantDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

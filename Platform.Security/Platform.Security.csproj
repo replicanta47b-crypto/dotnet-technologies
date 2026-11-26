@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Лаб. 09: спільна безпека платформи. Один код для всіх мікросервісів, Gateway і Aggregator:
+       • валідація JWT від трьох провайдерів (власний Auth Service, Duende IdentityServer, Keycloak) — схема обирається за claim iss;
+       • permission-based авторизація: [RequirePermission("payments:update")] перевіряється ЛОКАЛЬНО в кожному сервісі, без звернення до IdP;
+       • Swagger: Bearer-токен і OAuth 2.0 Authorization Code + PKCE (публічний client «swagger»).
+       Бізнес-логіки тут немає. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.*" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="8.*" />
+  </ItemGroup>
+
+</Project>

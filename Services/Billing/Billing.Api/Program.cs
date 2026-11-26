@@ -14,6 +14,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Platform.Security;
 using Platform.ServiceDefaults;
 using Serilog;
 
@@ -21,6 +22,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Лаб. 05: Serilog, OpenTelemetry, CorrelationId-handler, health checks, service discovery — з ServiceDefaults
 builder.AddServiceDefaults();
+
+// ---- Лаб. 09: захист. JWT приймаємо від Auth Service, IdentityServer і Keycloak (схема за issuer); дозвіл на кожен endpoint —
+// [RequirePermission("billing:...")] перевіряється ЛОКАЛЬНО за claims токена, без звернення до IdP ----
+builder.AddPlatformAuthentication("billing");
 
 // ---- EF Core: рядок підключення з appsettings.json; ConnectionStrings__BillingDb (env) має пріоритет ----
 var connectionString = builder.Configuration.GetConnectionString("BillingDb")
@@ -76,7 +81,7 @@ builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c => c.AddPlatformSecurity(builder.Configuration, "billing"));
 
 var app = builder.Build();
 
@@ -86,7 +91,13 @@ app.UseStatusCodePages();
 app.UseSerilogRequestLogging();
 
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(o =>
+{
+    o.OAuthClientId("swagger");   // публічний client IdentityServer: Authorization Code + PKCE (Лаб. 09)
+    o.OAuthUsePkce();
+});
+
+app.UsePlatformAuthorization();   // UseAuthentication + UseAuthorization; /health і Swagger лишаються відкритими
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapControllers();

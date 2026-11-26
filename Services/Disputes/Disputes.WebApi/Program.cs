@@ -9,6 +9,7 @@ using Disputes.WebApi.Metrics;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Disputes.WebApi.Rpc;
 using Disputes.WebApi.Mapping;
+using Platform.Security;
 using Platform.ServiceDefaults;
 using Serilog;
 
@@ -17,6 +18,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Лаб. 05: Serilog, OpenTelemetry, CorrelationId-handler, health checks, service discovery — з ServiceDefaults
 // (LoggingBehavior / PerformanceBehavior пишуть через ILogger → Serilog → OpenTelemetry)
 builder.AddServiceDefaults();
+
+// ---- Лаб. 09: захист. JWT приймаємо від Auth Service, IdentityServer і Keycloak (схема за issuer); дозвіл на кожен endpoint —
+// [RequirePermission("disputes:...")] перевіряється ЛОКАЛЬНО за claims токена, без звернення до IdP ----
+builder.AddPlatformAuthentication("disputes");
 
 // ---- Кожен шар надає власний метод розширення ----
 builder.Services
@@ -56,7 +61,7 @@ builder.Services.AddHealthChecks()
 builder.Services.AddGrpcHealthChecks();   // gRPC Health Checking Protocol
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c => c.AddPlatformSecurity(builder.Configuration, "disputes"));
 
 var app = builder.Build();
 
@@ -66,7 +71,13 @@ app.UseExceptionHandler();                       // → ApiExceptionHandler → 
 app.UseStatusCodePages();
 
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(o =>
+{
+    o.OAuthClientId("swagger");   // публічний client IdentityServer: Authorization Code + PKCE (Лаб. 09)
+    o.OAuthUsePkce();
+});
+
+app.UsePlatformAuthorization();   // UseAuthentication + UseAuthorization; /health і Swagger лишаються відкритими
 
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapControllers();
