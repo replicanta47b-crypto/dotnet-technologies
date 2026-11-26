@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.git/
+**/node_modules/
+**/aspirate-output/
+**/*.user
+Platform.Infrastructure.Keycloak/
+docs/
+postman/
+k8s/

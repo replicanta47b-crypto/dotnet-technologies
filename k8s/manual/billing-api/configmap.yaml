@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: billing-config
+data:                                   # відкриті налаштування (не секрети)
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_HTTP_PORTS: "8080"
+  ConnectionStrings__redis: "redis:6379"                       # DNS-ім'я Service redis
+  ConnectionStrings__messaging: "amqp://guest:guest@rabbitmq:5672"   # лише dev-обліковий запис брокера

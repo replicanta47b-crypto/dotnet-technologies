@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_HTTP_PORTS: "8080"
+  # '__' у змінній оточення = ':' у конфігурації .NET: services__billing-api__http__0 -> services:billing-api:http:0.
+  # Такий самий формат Aspire передавав у Лаб. 05, тому код Gateway не змінюється.
+  services__billing-api__http__0: "http://billing-api"
+  services__auth-api__http__0: "http://auth-api"

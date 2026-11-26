@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-api
+  labels: { app: auth-api }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: auth-api }
+  template:
+    metadata:
+      labels: { app: auth-api }
+    spec:
+      containers:
+        - name: auth-api
+          image: auth-api:v1
+          imagePullPolicy: IfNotPresent      # образ зібрано локально (docker build) — у реєстр не публікується
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: auth-config
+            - secretRef:
+                name: auth-secrets
+          startupProbe:                       # дає застосунку час на старт (міграції EF) до liveness
+            httpGet: { path: /health/startup, port: 8080 }
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:                      # збій -> kubelet ПЕРЕЗАПУСКАЄ контейнер (процес завис)
+            httpGet: { path: /health/live, port: 8080 }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:                     # збій -> под ВИКЛЮЧАЄТЬСЯ з Service (без перезапуску)
+            httpGet: { path: /health/ready, port: 8080 }
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { memory: 512Mi }
