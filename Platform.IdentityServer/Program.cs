@@ -30,10 +30,15 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(o =>
 
 builder.Services.AddRazorPages();
 
+// cookie Identity (Identity.Application) теж Lax — інакше при http браузер його не збереже
+builder.Services.ConfigureApplicationCookie(o => o.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax);
+
 // ---- Duende IdentityServer: конфігурація і operational-дані — в БД (EF), користувачі — через ASP.NET Identity ----
 builder.Services.AddIdentityServer(o =>
     {
         o.IssuerUri = builder.Configuration["IdentityServer:Issuer"];
+        // локальна розробка по http: SameSite=None вимагає Secure, і Chrome відкидає такий cookie → логін «зациклюється»
+        o.Authentication.CookieSameSiteMode = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
         o.Events.RaiseErrorEvents = true;
         o.Events.RaiseInformationEvents = true;
         o.Events.RaiseFailureEvents = true;
